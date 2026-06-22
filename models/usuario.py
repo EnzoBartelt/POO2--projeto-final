@@ -2,7 +2,7 @@ from models.avaliacao import Avaliacao
 from models.midia import *
 
 class Usuario:
-    def __init__ (self, nome : str, email : str, senha : str, filmes_vistos : dict[Midia : Avaliacao]):
+    def __init__ (self, nome : str, email : str, senha : str, filmes_vistos : dict[Midia, Avaliacao]):
         self._nome = nome               # nome de usuário 
         self._email = email             # email do usuário
         self._senha = senha             # senha do usuário

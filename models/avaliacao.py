@@ -2,8 +2,7 @@ from models.midia import Midia
 from datetime import datetime
 
 class Avaliacao:
-    def __init__ (self, midia : Midia, nota : float, comentario : str, data : datetime):
-        self._midia = midia             # Mídia que está sendo avaliada
+    def __init__ (self, nota : float, comentario : str, data : datetime):
         self._nota = nota               # Nota dada pelo usuário
         self._comentario = comentario   # Comentário inserido pelo usuário
         self._data = data               # Data da avaliação
