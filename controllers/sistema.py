@@ -1,14 +1,69 @@
 import json
+import re
 from itertools import chain
+
 from models.midia import Midia, Filme, Serie
+from models.usuario import Usuario
+
 from services.groq import ClienteGroq
 from services.tmdb import ClienteTMBD
+from data.repositorio import Repositorio
 
 
 class Sistema:
     def __init__(self):
         self._cliente_tmdb = ClienteTMBD()
         self._cliente_groq = ClienteGroq()
+        self._repositorio = Repositorio()
+        self._usuario = None
+        self._id_usuario = None
+
+    def cadastrar(self, nome : str, email : str, senha : str):
+        if not nome or not email or not senha:
+            raise Exception("Todos os campos são obrigatórios.")
+        if not validar_nome(nome):
+            raise Exception("O nome de usuário não pode conter caracteres especiais.")
+        if not validar_email(email):
+            raise Exception("Insira um formato de email válido.")
+        if not validar_senha(senha):
+            raise Exception("A senha deve conter letras maiúsculas, minúsculas, números e caracteres especiais.")
+
+        usuario = Usuario(nome, email, senha)
+
+        return self._repositorio.salvar_usuario(usuario)
+    
+    def logar(self, input : str, senha : str):
+        if not input or not senha:
+            raise Exception("Preencha todos os campos para continuar.")
+
+        usuario = None
+        id_usuario = None
+
+        match classificar_entrada(input):
+            case "email":
+                usuario, id_usuario = self._repositorio.buscar_usuario_email(input)
+            case "nome":
+                usuario, id_usuario = self._repositorio.buscar_usuario_nome(input)
+            case "invalido":
+                raise Exception("Insira um nome de usuário ou email válido.")
+            case _:
+                raise Exception("Erro desconhecido")
+
+        if usuario and id_usuario:
+            if self._repositorio.validar_senha(senha, usuario.get_senha()):
+                self._usuario = usuario
+                self._id_usuario = id_usuario
+                print(f"Login efetuado com sucesso! Usuário {self._usuario.get_nome()} ativo.")
+                return True
+        else:
+            return False
+        
+    def deslogar(self):
+        self._usuario = None
+        self._id_usuario = None
+
+    def carregar_midias(self):
+        pass
 
     def buscar(self, keyword: str):
         try:
@@ -105,3 +160,35 @@ class Sistema:
             recomendacoes.append(midia)
 
         return recomendacoes
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
+#   FUNÇÕES AUXILIARES
+# --------------------------------------------------------------------------------------------------------------------------------------------
+
+def validar_nome(nome: str) -> bool:
+    return bool(re.match(r'^[A-Za-zÀ-ÿ\s]+$', nome))
+
+def validar_email(email: str) -> bool:
+    return bool(re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email))
+
+def validar_senha(senha: str) -> bool:
+    if len(senha) < 8:
+        return False
+    if not re.search(r'[A-Z]', senha):  # maiúscula
+        return False
+    if not re.search(r'[a-z]', senha):  # minúscula
+        return False
+    if not re.search(r'[0-9]', senha):  # número
+        return False
+    if not re.search(r'[\W_]', senha):  # caractere especial
+        return False
+    return True
+
+def classificar_entrada(texto: str) -> str:
+    if re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', texto):
+        return "email"
+    
+    if re.match(r'^[A-Za-zÀ-ÿ\s]+$', texto):
+        return "nome"
+
+    return "invalido"

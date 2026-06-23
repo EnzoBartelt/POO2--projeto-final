@@ -58,6 +58,7 @@ CREATE TABLE avaliacao (
     id_midia INT NOT NULL,
     nota DECIMAL(2,1) CHECK (0 <= nota <= 5),
     comentario TEXT,
+    data_avaliacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id_usuario, id_midia),
     FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario)
 		ON UPDATE CASCADE ON DELETE CASCADE,

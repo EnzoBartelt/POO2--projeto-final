@@ -71,10 +71,10 @@ class Repositorio:
             user = cursor.fetchone()
             if user:
                 return Usuario(user["nome"], user["email"], user["senha"]), user["id_usuario"]
-            return None
+            return None, None
         except Exception as e:
             print(f"[DB] Erro ao realizar busca: {e}")
-            return None
+            return None, None
         finally:
             cursor.close()
 
@@ -89,10 +89,10 @@ class Repositorio:
             user = cursor.fetchone()
             if user:
                 return Usuario(user["nome"], user["email"], user["senha"]), user["id_usuario"]
-            return None
+            return None, None
         except Exception as e:
             print(f"[DB] Erro ao realizar busca: {e}")
-            return None
+            return None, None
         finally:
             cursor.close()
 
