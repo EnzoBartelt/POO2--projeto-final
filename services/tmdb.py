@@ -1,13 +1,10 @@
 import requests
 import os
 
-
 class ClienteTMBD:
     def __init__(self):
         self._base_url = "https://api.themoviedb.org/3"
         self._headers = {"Authorization" : f"Bearer {os.getenv('TMDB_API_KEY')}", "accept" : "application/json"}
-        # print(self._headers)
-        # exit()
 
     def buscar(self, keyword : str):
         endpoint = "/search/multi"

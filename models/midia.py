@@ -2,29 +2,38 @@ from models.avaliacao import Avaliacao
 
 class Midia:
     def __init__ (self, tmdb_id : int, titulo : str, generos : list, descricao : str, avaliacoes : float, poster_path : str, data_lancamento : str):
-        self._tmdb_id = tmdb_id
-        self._titulo = titulo           # Título da obra (original_title)
-        self._generos = generos           # Gênero(s) (Drama, Suspense, Ação, Terror, etc) (genres)
-        self._descricao = descricao     # Breve resumo/sinopse (overview)
-        self._avaliacoes = avaliacoes   # Avaliações registradas pelos usuários (vote_average)
-        self._poster_path = poster_path
-        self._data_lancamento = data_lancamento
+        self._tmdb_id = tmdb_id                         # Identificador único (id)
+        self._titulo = titulo                           # Título da obra (original_title)
+        self._generos = generos                         # Gênero(s) (Drama, Suspense, Ação, Terror, etc) (genres)
+        self._descricao = descricao                     # Breve resumo/sinopse (overview)
+        self._avaliacoes = avaliacoes                   # Avaliações registradas pelos usuários (vote_average)
+        self._poster_path = poster_path                 # Endpoint para localização da imagem de poster (poster_path)
+        self._data_lancamento = data_lancamento         # Data de lançamento para o público (release_date)
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 #   GETTERS
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
+    def get_id(self):
+        return self._tmdb_id
+
     def get_titulo(self):
         return self._titulo
     
-    def get_genero(self):
-        return self._genero
+    def get_generos(self):
+        return self._generos
     
     def get_descricao(self):
         return self._descricao
     
     def get_avaliacoes(self):
         return self._avaliacoes
+    
+    def get_poster_path(self):
+        return self._poster_path
+    
+    def get_data_lancamento(self):
+        return self._data_lancamento
     
 # --------------------------------------------------------------------------------------------------------------------------------------------
 #   SETTERS
@@ -51,12 +60,11 @@ class Filme(Midia):
         return self._colecao
 
 class Serie(Midia):
-    def __init__ (self, tmdb_id : int, titulo : str, generos : list, descricao : str, avaliacoes : float, poster_path : str, data_lancamento : str, temporadas : int, episodios : int, ano_final : int, avaliacao_temporadas, status : str):
+    def __init__ (self, tmdb_id : int, titulo : str, generos : list, descricao : str, avaliacoes : float, poster_path : str, data_lancamento : str, temporadas : int, episodios : int, ano_final : int, status : str):
         super().__init__(tmdb_id, titulo, generos, descricao, avaliacoes, poster_path, data_lancamento)
         self._temporadas = temporadas                        # Quantidade de temporadas (number_of_seasons)
-        self._episodios = episodios                          # Quantidade de episódios (number_of_episodes)
+        self._episodios = episodios                          # Quantidade de episódios (number_of_episodes)        
         self._ano_final = ano_final                          # Ano do encerramento de exibição (último episódio) (last_air_date)
-        self._avaliacao_temporadas = avaliacao_temporadas    # Avaliação de cada temporada
         self._status = status                                # Status da produção (Encerrada/Ativa) (status)
 # --------------------------------------------------------------------------------------------------------------------------------------------
 #   GETTERS
@@ -68,24 +76,12 @@ class Serie(Midia):
     def get_episodios(self):
         return self._episodios
     
-    def get_ano_lancamento(self):
-        return self._ano_lancamento
-    
     def get_ano_final(self):
         return self._ano_final
     
-    def get_avaliacao_episodios(self):
-        return self._avaliacao_episodios
-    
-    def get_avaliacao_temporadas(self):
-        return self._avaliacao_temporadas
+    def get_status(self):
+        return self._status
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 #   SETTERS
 # --------------------------------------------------------------------------------------------------------------------------------------------
-
-    def set_avaliacao_episodios(self, avaliacao_episodios):
-        pass
-
-    def set_avaliacao_temporadas(self, avaliacao_temporadas):
-        pass
