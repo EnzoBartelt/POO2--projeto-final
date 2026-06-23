@@ -1,1 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
 .env
+.venv/
+venv/
+env/
+
+# Build and package metadata
+dist/
+build/
+*.egg-info/
+
+# Test, lint, and coverage caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local databases and generated data
+.db/
+.data*/
+*.sqlite*
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
