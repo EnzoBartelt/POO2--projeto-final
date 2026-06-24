@@ -21,7 +21,7 @@ class Repositorio:
                 port = int(os.getenv('DB_PORT', 3306)),
                 user = os.getenv('DB_USER'),
                 password = os.getenv('DB_PASSWORD'),
-                database = os.getenv('DB_DATABSE', "projeto_poo2")
+                database = os.getenv('DB_DATABASE', "projeto_poo2")
             )
             print("[DB] Conexão com banco de dados estabelecida com sucesso!")
         except Exception as e:
@@ -161,14 +161,14 @@ class Repositorio:
 
             alvo = cursor.fetchone()
             if alvo:
-                cursor.execute("INSERT IGNORE INTO midia_genero (id_midia, id_geneto) VALUES (%s, %s)",
+                cursor.execute("INSERT IGNORE INTO midia_genero (id_midia, id_genero) VALUES (%s, %s)",
                                (midia.get_id(), alvo["id_genero"])
                             )
                 
     def midia_existe(self, tmdb_id: int):
         try:
             cursor = self._cursor()
-            cursor.execute("SELECT * FROM midia WHERE id_tmdb = %s", (tmdb_id,))
+            cursor.execute("SELECT 1 FROM midia WHERE id_tmdb = %s", (tmdb_id,))
             return cursor.fetchone() is not None
         except Error as e:
             print(f"[DB] Erro ao verificar mídia: {e}")
@@ -182,7 +182,7 @@ class Repositorio:
 
         sql = """
             INSERT INTO avaliacao (id_usuario, id_midia, nota, comentario)
-            VALUES (%s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 nota = VALUES(nota),
                 comentario = VALUES(comentario)

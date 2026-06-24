@@ -4,7 +4,7 @@ class Midia:
     def __init__ (self, tmdb_id : int, titulo : str, generos : list, descricao : str, avaliacoes : float, poster_path : str, data_lancamento : str):
         self._tmdb_id = tmdb_id                         # Identificador único (id)
         self._titulo = titulo                           # Título da obra (original_title)
-        self._generos = generos                         # Gênero(s) (Drama, Suspense, Ação, Terror, etc) (genres)
+        self._generos = generos                         # Gênero(s) (Drama, Suspense, Ação, Terror, etc) (genre_ids)
         self._descricao = descricao                     # Breve resumo/sinopse (overview)
         self._avaliacoes = avaliacoes                   # Avaliações registradas pelos usuários (vote_average)
         self._poster_path = poster_path                 # Endpoint para localização da imagem de poster (poster_path)

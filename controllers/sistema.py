@@ -26,15 +26,15 @@ class Sistema:
         if not validar_email(email):
             raise Exception("Insira um formato de email válido.")
         if not validar_senha(senha):
-            raise Exception("A senha deve conter letras maiúsculas, minúsculas, números e caracteres especiais.")
+            raise Exception("Senha fraca")
 
         usuario = Usuario(nome, email, senha)
-
-        return self._repositorio.salvar_usuario(usuario)
+        self._repositorio.salvar_usuario(usuario)
+        return True
     
-    def logar(self, input : str, senha : str):
+    def logar(self, input : str, senha : str) -> bool:
         if not input or not senha:
-            raise Exception("Preencha todos os campos para continuar.")
+            raise Exception("Preencha todos os campos para continuar")
 
         usuario = None
         id_usuario = None
@@ -64,6 +64,88 @@ class Sistema:
 
     def carregar_midias(self):
         pass
+
+    def trending(self):
+        midias = []
+
+        try:
+            trending = self._cliente_tmdb.trending()
+            for midia in trending["results"]:
+                generos = []
+
+                if midia["media_type"] == "movie":
+                    filme = self._cliente_tmdb.detalhes_filme(midia["id"])
+
+                    for g in filme["genres"]:
+                        generos.append(g["name"])
+
+                    midias.append(Filme(
+                        filme["id"], 
+                        filme["original_title"], 
+                        generos,
+                        filme["overview"], 
+                        filme["vote_average"], 
+                        filme["poster_path"],
+                        filme["release_date"],
+                        filme["runtime"],
+                        filme["belongs_to_collection"]["name"] if filme["belongs_to_collection"] else None
+                    ))
+                elif midia["media_type"] == "tv":
+                    serie = self._cliente_tmdb.detalhes_serie(midia["id"])
+
+                    for g in serie["genres"]:
+                        generos.append(g["name"])
+
+                    midias.append(Serie(
+                        serie["id"],
+                        serie["original_name"],
+                        generos,
+                        serie["overview"],
+                        serie["vote_average"],
+                        serie["poster_path"],
+                        serie["first_air_date"],
+                        serie["number_of_seasons"],
+                        serie["number_of_episodes"],
+                        serie["last_air_date"],
+                        serie["status"]
+                    ))
+
+            return midias
+        
+        except Exception as e:
+            print(e)
+            return None
+
+    def upcoming(self):
+        midias = []
+
+        try:
+            upcoming = self._cliente_tmdb.upcoming()
+            for midia in upcoming["results"]:
+                generos = []
+
+                filme = self._cliente_tmdb.detalhes_filme(midia["id"])
+
+                for g in filme["genres"]:
+                    generos.append(g["name"])
+
+                midias.append(Filme(
+                    filme["id"], 
+                    filme["original_title"], 
+                    generos,
+                    filme["overview"], 
+                    filme["vote_average"], 
+                    filme["poster_path"],
+                    filme["release_date"],
+                    filme["runtime"],
+                    filme["belongs_to_collection"]["name"] if filme["belongs_to_collection"] else None
+                ))
+
+            return midias
+        
+        except Exception as e:
+            print(e)
+            return None
 
     def buscar(self, keyword: str):
         try:

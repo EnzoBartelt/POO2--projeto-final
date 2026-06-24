@@ -7,8 +7,7 @@ class ClienteTMBD:
         self._headers = {"Authorization" : f"Bearer {os.getenv('TMDB_API_KEY')}", "accept" : "application/json"}
 
     def buscar(self, keyword : str):
-        endpoint = "/search/multi"
-        url = self._base_url + endpoint
+        url = self._base_url + "/search/multi"
         params = {"query" : keyword, "language" : "pt-BR"}
         response = requests.get(url, params=params, headers=self._headers)
 
@@ -18,13 +17,41 @@ class ClienteTMBD:
         else:
             raise Exception(f"Erro: {response.status_code}")
         
-    def descobrir(self):
-        endpoint = "/discover/movies"
-        url = self._base_url + endpoint
-        response = requests.get(url)
+    def trending(self):
+        url = self._base_url + "/trending/all/day"
+        params = {"language" : "pt-BR"}
+        response = requests.get(url, params=params, headers=self._headers)
 
         if response.status_code == 200:
-            return response.json
+            return response.json()
+        else:
+            raise Exception(f"Erro: {response.status_code}")
+        
+    def upcoming(self):
+        url = self._base_url + "/movie/upcoming"
+        params = {"language" : "pt-BR"}
+        response = requests.get(url, params=params, headers=self._headers)
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Erro: {response.status_code}")
+
+    def detalhes_filme(self, id : int):
+        url = self._base_url + f"/movie/{id}"
+        response = requests.get(url, headers=self._headers)
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Erro: {response.status_code}")
+
+    def detalhes_serie(self, id : int):
+        url = self._base_url + f"/tv/{id}"
+        response = requests.get(url, headers=self._headers)
+
+        if response.status_code == 200:
+            return response.json()
         else:
             raise Exception(f"Erro: {response.status_code}")
 
