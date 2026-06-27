@@ -10,6 +10,7 @@ from PIL import Image, ImageTk
 from io import BytesIO
 from time import sleep
 
+from models.midia import *
 from controllers.sistema import Sistema
 from views.inicio import PainelInicio
 
@@ -47,7 +48,7 @@ class App(ctk.CTk):
         self.title("Super avaliador de filmes")
         largura = self.winfo_screenwidth()
         altura = self.winfo_screenheight()
-        self.geometry(f"{largura}x{altura}+0+0")
+        self.geometry(f"{largura-100}x{altura-100}+0+0")
 
         self._mostrar_tela("login")
 
@@ -206,32 +207,135 @@ class TelaPrincipal(ctk.CTkFrame):
         hotbar.grid(row=0, column=0, columnspan=2, sticky="nsew")
         hotbar.grid_propagate(False)
 
-        esquerdo = PainelEsquerdo(self, self._sistema)
-        esquerdo.grid(row=1, column=0, sticky="nsew", padx=(10, 5), pady=10)
-        direito = PainelDireito(self, self._sistema)
-        direito.grid(row=1, column=1, sticky="nsew", padx=(5, 10), pady=10)
+        self.esquerdo = PainelEsquerdo(self, self._sistema)
+        self.esquerdo.grid(row=1, column=0, sticky="nsew", padx=(10, 5), pady=10)
+        self.direito = PainelDireito(self, self._sistema)
+        self.direito.grid(row=1, column=1, sticky="nsew", padx=(5, 10), pady=10)
 
 class PainelEsquerdo(ctk.CTkFrame):
     def __init__(self, pai : ctk.CTkFrame, sistema : Sistema):
         super().__init__(pai)
+        self._n = 9
+        self._pai = pai
         self._sistema = sistema
         self.grid_propagate(False)
         self._carregar()
 
     def _carregar(self):
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=0)
+        self.grid_rowconfigure(0, weight=0)
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=0)
         self.grid_columnconfigure(0, weight=1)
 
+        ctk.CTkLabel(self, text="Assistidos", font=("Arial", 15, "bold"), anchor="w").grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(12, 4))
+
+        self._frame_cards = ctk.CTkFrame(self, fg_color="transparent")
+        self._frame_cards.grid(row=1, column=0, columnspan=2, sticky="new", padx=6, pady=(0, 6))
+        self._frame_cards.grid_columnconfigure(0, weight=1)
+
         entry_buscar = ctk.CTkEntry(self, placeholder_text="Pesquise por filmes ou séries", height=40, width=600)
-        entry_buscar.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
+        entry_buscar.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
 
         botao_buscar = ctk.CTkButton(self, text="Buscar", width=100, height=40, command=lambda: self._buscar(self, entry_buscar))
-        botao_buscar.grid(row=1, column=1, sticky="e", padx=(5, 10), pady=10)
+        botao_buscar.grid(row=2, column=1, sticky="e", padx=(5, 10), pady=10)
+
+        self.after(100, self._carregar_historico)
+
+    def _carregar_historico(self):
+        thread = threading.Thread(target=self._worker_historico, daemon=True)
+        thread.start()
+
+    def _worker_historico(self):
+        try:
+            historico = self._sistema.carregar_midias()
+            self.after(0, self._exibir_historico, historico)
+        except Exception as e:
+            print(f"Erro ao carregar histórico: {e}")
+
+    def _exibir_historico(self, historico: dict):
+        for widget in self._frame_cards.winfo_children():
+            widget.destroy()
+
+        if not historico:
+            ctk.CTkLabel(self._frame_cards, text="Nenhuma mídia\navaliada ainda.", text_color="gray", justify="center").pack(pady=20)
+            return
+
+        for tmdb_id, dados in list(historico.items())[:self._n]:
+            card = CardHistorico(self._frame_cards, midia=dados["midia"], avaliacao=dados["avaliacao"], comando=self._ao_clicar)
+            card.grid(sticky="ew", pady=4, padx=4)
+
+    def _ao_clicar(self, midia):
+        PaginaMidia(self._pai, sistema=self._sistema, midia=midia)
+
+    def _buscar(self, entry):
+        pass
+
+    # Chamado externamente após o usuário fazer uma nova avaliação.
+    def atualizar(self):
+        self._carregar_historico()
+
+class CardHistorico(ctk.CTkFrame):
+    def __init__(self, pai, midia, avaliacao, comando=None):
+        super().__init__(pai, cursor="hand2")
+        self._largura = 40
+        self._altura = 60
+        self._midia     = midia
+        self._avaliacao = avaliacao
+        self._comando   = comando
+        self._img_ref   = None
+        self._construir()
+        self._carregar_poster()
+
+    def _construir(self):
+        self._label_poster = ctk.CTkLabel(self, text="", width=self._largura, height=self._altura)
+        self._label_poster.pack(side="left", padx=(6, 8), pady=6)
+
+        info = ctk.CTkFrame(self, fg_color="transparent")
+        info.pack(side="left", fill="both", expand=True, pady=6)
+
+        ctk.CTkLabel(info, text=self._midia.get_titulo(), font=("Arial", 12, "bold"), wraplength=140, justify="left", anchor="w").pack(anchor="w")
+
+        nota = self._avaliacao.get_nota()
+        ctk.CTkLabel(info, text=f"★ {nota:.1f}", font=("Arial", 11), text_color="#f5c518", anchor="w").pack(anchor="w", pady=(2, 0))
+
+        self._bind_clique(self)
+
+    def _bind_clique(self, widget):
+        if self._comando:
+            widget.bind("<Button-1>", lambda e: self._comando(self._midia))
+            for filho in widget.winfo_children():
+                self._bind_clique(filho)
+
+    def _carregar_poster(self):
+        path = self._midia.get_poster_path()
+        if not path:
+            return
+        thread = threading.Thread(target=self._worker_poster, args=(path,), daemon=True)
+        thread.start()
+
+    def _worker_poster(self, path):
+        try:
+            url = TMDB_IMAGE_BASE + path
+            resposta = requests.get(url, timeout=5)
+            resposta.raise_for_status()
+            imagem = Image.open(BytesIO(resposta.content))
+            imagem = imagem.resize((self._largura, self._altura))
+            ctk_img = ctk.CTkImage(light_image=imagem, dark_image=imagem, size=(self._largura, self._altura))
+            self.after(0, self._aplicar_poster, ctk_img)
+        except Exception:
+            pass
+
+    def _aplicar_poster(self, ctk_img):
+        try:
+            self._img_ref = ctk_img
+            self._label_poster.configure(image=ctk_img, text="")
+        except Exception:
+            pass    
 
 class PainelDireito(ctk.CTkFrame):
     def __init__(self, pai : ctk.CTkFrame, sistema : Sistema):
         super().__init__(pai)
+        self._pai = pai
         self._sistema = sistema
         self._carregar()
     
@@ -264,21 +368,27 @@ class PainelDireito(ctk.CTkFrame):
         thread.start()
 
     def _worker_inicial(self):
-        try:
-            trending = self._sistema.trending()
-            upcoming = self._sistema.upcoming()
-
-            self.after(0, self._exibir_inicial, trending, upcoming)
-        except Exception as e:
-            self.after(0, self._label_status.configure, {"text": f"Erro ao carregar: {e}"})
+        tentativas = 3
+        for i in range(tentativas):
+            try:
+                trending = self._sistema.trending()
+                upcoming = self._sistema.upcoming()
+                self.after(0, self._exibir_inicial, trending, upcoming)
+                return
+            except Exception as e:
+                if i < tentativas - 1:
+                    sleep(2) 
+                else:
+                    self.after(0, self._label_status.configure,
+                            {"text": "Serviço temporariamente indisponível. Tente novamente."})
 
     def _exibir_inicial(self, trending, upcoming):
         self._label_status.destroy()
-        self._secao_trending.exibir(trending, comando=self._ao_clicar_midia)
-        self._secao_upcoming.exibir(upcoming, comando=self._ao_clicar_midia)
+        self._secao_trending.exibir(trending, comando=self._ao_clicar)
+        self._secao_upcoming.exibir(upcoming, comando=self._ao_clicar)
 
-    def _ao_clicar_midia(self, midia):
-        print(f"Clicou em: {midia.get_titulo()}")
+    def _ao_clicar(self, midia):
+        PaginaMidia(self._pai, sistema=self._sistema, midia=midia)
 
     def _exibir_resultados(self, midias):
         self._label_status.grid_remove()
@@ -304,22 +414,10 @@ class CardMidia(ctk.CTkFrame):
         self._carregar_poster()
 
     def _construir(self):
-        self._label_poster = ctk.CTkLabel(
-            self,
-            text="",
-            width=self._largura,
-            height=self._altura,
-            fg_color="#3a3a3a"
-        )
+        self._label_poster = ctk.CTkLabel(self, text="", width=self._largura, height=self._altura, fg_color="#3a3a3a")
         self._label_poster.pack(padx=6, pady=(6, 2))
 
-        ctk.CTkLabel(
-            self,
-            text=self._midia.get_titulo(),
-            font=("Arial", 12, "bold"),
-            wraplength=self._largura - 12,
-            justify="center"
-        ).pack(padx=6)
+        ctk.CTkLabel(self, text=self._midia.get_titulo(), font=("Arial", 12, "bold"), wraplength=self._largura - 12, justify="center").pack(padx=6)
 
         rodape = ctk.CTkFrame(self, fg_color="transparent", width=self._largura)
         rodape.pack(padx=6, pady=(2, 6))
@@ -328,7 +426,7 @@ class CardMidia(ctk.CTkFrame):
         ctk.CTkLabel(rodape, text=ano, font=("Arial", 11), text_color="gray").pack(side="left", padx=(0, 10))
 
         nota = self._midia.get_avaliacoes()
-        nota_texto = f"{nota:.1f}" if nota else ""
+        nota_texto = f"★ {nota:.1f}" if nota else ""
         ctk.CTkLabel(rodape, text=nota_texto, font=("Arial", 11), text_color="#f5c518").pack(side="right", padx=(10, 0))
 
         self._bind_clique(self)
@@ -359,8 +457,11 @@ class CardMidia(ctk.CTkFrame):
             pass
 
     def _aplicar_poster(self, ctk_img):
-        self._img_ref = ctk_img 
-        self._label_poster.configure(image=ctk_img, text="")
+        try:
+            self._img_ref = ctk_img
+            self._label_poster.configure(image=ctk_img, text="")
+        except Exception:
+            pass    
 
 
 class SecaoMidias(ctk.CTkFrame):
@@ -372,19 +473,13 @@ class SecaoMidias(ctk.CTkFrame):
         self._construir()
 
     def _construir(self):
-        ctk.CTkLabel(
-            self,
-            text=self._titulo_secao,
-            font=("Arial", 15, "bold"),
-            anchor="w"
-        ).pack(fill="x", padx=10, pady=(10, 4))
+        ctk.CTkLabel(self, text=self._titulo_secao, font=("Arial", 15, "bold"), anchor="w").pack(fill="x", padx=10, pady=(10, 4))
 
         self._frame_cards = ctk.CTkFrame(self, fg_color="transparent")
         self._frame_cards.pack(fill="x", padx=10)
 
         for i in range(self._n):
             self._frame_cards.grid_columnconfigure(i, weight=1, uniform="card", minsize=130)
-
 
     def exibir(self, midias: list, comando=None):
         for widget in self._frame_cards.winfo_children():
@@ -393,3 +488,236 @@ class SecaoMidias(ctk.CTkFrame):
         for i, midia in enumerate(midias[:self._n]):
             card = CardMidia(self._frame_cards, midia, comando=comando)
             card.grid(row=0, column=i, padx=5, pady=5, sticky="n")
+
+class PaginaMidia(ctk.CTkToplevel):
+    def __init__(self, pai, sistema: Sistema, midia: Midia):
+        super().__init__(pai)
+        self._largura = 200
+        self._altura = 300
+        self._sistema = sistema
+        self._midia = self._sistema.detalhes_midia(midia)
+        self._callback_avaliacao = pai.esquerdo.atualizar
+        self._img_ref = None
+
+        self.title(midia.get_titulo())
+        self.geometry("600x600")
+        self.resizable(False, False)
+        self.grab_set()
+
+        self._avaliacao = self._sistema.get_avaliacao_usuario(midia.get_id())
+        self._construir()
+        self._carregar_poster()
+
+    def _construir(self):
+        self.grid_columnconfigure(0, weight=0)
+        self.grid_columnconfigure(1, weight=1) 
+        self.grid_rowconfigure(0, weight=0)
+        self.grid_rowconfigure(1, weight=1)
+
+        self._label_poster = ctk.CTkLabel(self, text="", width=self._largura, height=self._altura)
+        self._label_poster.grid(row=0, column=0, padx=(16, 12), pady=16, sticky="n")
+
+        # ── Painel de informações ──
+        info = ctk.CTkFrame(self, fg_color="transparent")
+        info.grid(row=0, column=1, sticky="nsew", padx=(0, 16), pady=16)
+        info.grid_columnconfigure(0, weight=1)
+        self._construir_info(info)
+
+        # ── Rodapé: comentário + ações ──
+        self._frame_rodape = ctk.CTkFrame(self, fg_color="transparent")
+        self._frame_rodape.grid(row=1, column=0, columnspan=2, sticky="ew",padx=16, pady=(0, 16))
+        self._frame_rodape.grid_columnconfigure(0, weight=1)
+        self._construir_rodape()
+
+    def _construir_info(self, pai):
+        linha = 0
+
+        # Título
+        ctk.CTkLabel(pai, text=self._midia.get_titulo(), font=("Arial", 18, "bold"), wraplength=380, justify="left", anchor="w").grid(row=linha, column=0, sticky="w", pady=(0, 4))
+        linha += 1
+
+        # Gêneros
+        generos = ", ".join(self._midia.get_generos()) if self._midia.get_generos() else "—"
+        ctk.CTkLabel(pai, text=generos, font=("Arial", 12), text_color="gray", wraplength=380, justify="left", anchor="w").grid(row=linha, column=0, sticky="w", pady=(0, 8))
+        linha += 1
+
+        # Resumo
+        self._linha_dado(pai, linha, "Resumo", self._midia.get_descricao(), wrap=280)
+        linha += 1
+
+        # Dados específicos por tipo
+        if isinstance(self._midia, Filme):
+            duracao = self._midia.get_duracao()
+            duracao_fmt = f"{duracao // 60}h {duracao % 60}min" if duracao else "—"
+            self._linha_dado(pai, linha, "Duração", duracao_fmt)
+            linha += 1
+            self._linha_dado(pai, linha, "Lançamento", self._midia.get_data_lancamento() or "—")
+            linha += 1
+            colecao = self._midia.get_colecao()
+            if colecao:
+                self._linha_dado(pai, linha, "Coleção", colecao)
+                linha += 1
+
+        elif isinstance(self._midia, Serie):
+            self._linha_dado(pai, linha, "Temporadas", str(self._midia.get_temporadas()))
+            linha += 1
+            self._linha_dado(pai, linha, "Episódios", str(self._midia.get_episodios()))
+            linha += 1
+            self._linha_dado(pai, linha, "Status", self._midia.get_status() or "—")
+            linha += 1
+            self._linha_dado(pai, linha, "Último episódio", str(self._midia.get_ano_final() or "—"))
+            linha += 1
+
+        # Nota TMDB / Nota do usuário
+        if self._avaliacao:
+            self._label_nota_usuario = ctk.CTkLabel(pai, text=f"Sua avaliação: ★ {self._avaliacao.get_nota():.1f}", font=("Arial", 14, "bold"), text_color="#f5c518", anchor="w")
+            self._label_nota_usuario.grid(row=linha, column=0, sticky="w", pady=(12, 0))
+        else:
+            nota_tmdb = self._midia.get_avaliacoes()
+            nota_tmdb_txt = f"★ {nota_tmdb:.1f}" if nota_tmdb else "—"
+            self._linha_dado(pai, linha, "Nota TMDB", nota_tmdb_txt, cor_valor="#f5c518")
+        linha += 1
+
+        self._linha_acoes = linha  # guarda para posicionar botão/slider depois
+        self._pai_info = pai       # guarda referência para _construir_modo_avaliacao
+        self._construir_botao_acao(pai, linha)
+
+    def _linha_dado(self, pai, row, rotulo, valor, cor_valor=None, wrap=0):
+        """Renderiza uma linha 'Rótulo: Valor' no painel de informações."""
+        frame = ctk.CTkFrame(pai, fg_color="transparent")
+        frame.grid(row=row, column=0, sticky="w", pady=2)
+        ctk.CTkLabel(frame, text=f"{rotulo}:", font=("Arial", 12, "bold"), anchor="w").pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(frame, text=valor, font=("Arial", 12), wraplength=wrap, text_color=cor_valor or "white", anchor="w").pack(side="left")
+
+    # -------------------------------------------------------------------------
+    #   RODAPÉ — comentário e botões
+    # -------------------------------------------------------------------------
+
+    # Exibe comentário existente ou vazio, reconstruído após salvar
+    def _construir_rodape(self):
+        for widget in self._frame_rodape.winfo_children():
+            widget.destroy()
+
+        if self._avaliacao and self._avaliacao.get_comentario():
+            ctk.CTkLabel(self._frame_rodape, text=f'"{self._avaliacao.get_comentario()}"', font=("Arial", 12, "italic"), text_color="gray", wraplength=640, justify="center").grid(row=0, column=0, pady=(0, 4))
+
+    # -------------------------------------------------------------------------
+    #   BOTÃO DE AÇÃO (Avaliar / Editar)
+    # -------------------------------------------------------------------------
+
+    def _construir_botao_acao(self, pai, linha):
+        self._frame_acao = ctk.CTkFrame(pai, fg_color="transparent")
+        self._frame_acao.grid(row=linha, column=0, sticky="w", pady=(16, 0))
+
+        texto = "Editar avaliação" if self._avaliacao else "Avaliar"
+        ctk.CTkButton(self._frame_acao,text=texto, width=140, command=self._ativar_modo_avaliacao).pack()
+
+    # -------------------------------------------------------------------------
+    #   MODO AVALIAÇÃO — substitui o botão no lugar
+    # -------------------------------------------------------------------------
+
+    # Destrói o botão e constrói slider e campo de comentário no mesmo lugar
+    def _ativar_modo_avaliacao(self):
+        for widget in self._frame_acao.winfo_children():
+            widget.destroy()
+
+        nota_inicial = self._avaliacao.get_nota() if self._avaliacao else 2.5
+
+        # Slider de nota
+        ctk.CTkLabel(self._frame_acao, text="Sua nota:", font=("Arial", 12, "bold")).pack(anchor="w")
+
+        self._var_nota = ctk.DoubleVar(value=nota_inicial)
+
+        frame_slider = ctk.CTkFrame(self._frame_acao, fg_color="transparent")
+        frame_slider.pack(fill="x", pady=(2, 8))
+
+        self._slider = ctk.CTkSlider(frame_slider, from_=0, to=5, number_of_steps=10, variable=self._var_nota, width=200, command=self._atualizar_label_nota)
+        self._slider.pack(side="left")
+
+        self._label_nota_slider = ctk.CTkLabel(frame_slider, text=f"★ {nota_inicial:.1f}", font=("Arial", 13, "bold"), text_color="#f5c518", width=50)
+        self._label_nota_slider.pack(side="left", padx=(10, 0))
+
+        # Campo de comentário no lugar do texto exibido
+        for widget in self._frame_rodape.winfo_children():
+            widget.destroy()
+
+        comentario_inicial = self._avaliacao.get_comentario() if self._avaliacao else ""
+
+        self._entry_comentario = ctk.CTkTextbox(self._frame_rodape, height=60, wrap="word")
+        self._entry_comentario.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        self._entry_comentario.insert("0.0", comentario_inicial)
+
+        # Botões Salvar / Cancelar
+        frame_btns = ctk.CTkFrame(self._frame_rodape, fg_color="transparent")
+        frame_btns.grid(row=1, column=0)
+
+        ctk.CTkButton(frame_btns, text="Salvar", width=100, command=self._salvar_avaliacao).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(frame_btns, text="Cancelar", width=100, fg_color="transparent", border_width=1, command=self._cancelar).pack(side="left")
+
+    # Atualiza o label em tempo real
+    def _atualizar_label_nota(self, valor):
+        self._label_nota_slider.configure(text=f"★ {float(valor):.1f}")
+
+    # -------------------------------------------------------------------------
+    #   SALVAR / CANCELAR
+    # -------------------------------------------------------------------------
+
+    def _salvar_avaliacao(self):
+        nota = round(self._var_nota.get(), 1)
+        comentario = self._entry_comentario.get("0.0", "end").strip()
+
+        sucesso = self._sistema.avaliar(self._midia, nota, comentario)
+
+        if sucesso:
+            # Recarrega a avaliação e reconstrói os painéis afetados
+            self._avaliacao = self._sistema.get_avaliacao_usuario(self._midia.get_id())
+            self._reconstruir_pos_avaliacao()
+            if self._callback_avaliacao:
+                self._callback_avaliacao()  # atualiza PainelEsquerdo
+        else:
+            ctk.CTkLabel(self._frame_rodape, text="Erro ao salvar. Tente novamente.", text_color="red" ).grid(row=2, column=0)
+
+    # Volta ao estado original sem salvar
+    def _cancelar(self):
+        self._frame_acao.destroy()
+        self._construir_rodape()
+        self._construir_botao_acao(self._pai_info, self._linha_acoes)
+
+    def _reconstruir_pos_avaliacao(self):
+        # Atualiza label de nota do usuário se já existia, ou adiciona
+        self._frame_acao.destroy()
+        if hasattr(self, "_label_nota_usuario"):
+            self._label_nota_usuario.configure(text=f"Sua avaliação: ★ {self._avaliacao.get_nota():.1f}")
+        self._construir_rodape()
+        self._construir_botao_acao(self._pai_info, self._linha_acoes)
+
+    # -------------------------------------------------------------------------
+    #   POSTER
+    # -------------------------------------------------------------------------
+
+    def _carregar_poster(self):
+        path = self._midia.get_poster_path()
+        if not path:
+            return
+        thread = threading.Thread(target=self._worker_poster, args=(path,), daemon=True)
+        thread.start()
+
+    def _worker_poster(self, path):
+        try:
+            url = TMDB_IMAGE_BASE + path
+            resposta = requests.get(url, timeout=5)
+            resposta.raise_for_status()
+            imagem = Image.open(BytesIO(resposta.content))
+            imagem = imagem.resize((self._largura, self._altura))
+            ctk_img = ctk.CTkImage(light_image=imagem, dark_image=imagem, size=(self._largura, self._altura))
+            self.after(0, self._aplicar_poster, ctk_img)
+        except Exception:
+            pass
+
+    def _aplicar_poster(self, ctk_img):
+        try:
+            self._img_ref = ctk_img
+            self._label_poster.configure(image=ctk_img, text="")
+        except Exception:
+            pass    

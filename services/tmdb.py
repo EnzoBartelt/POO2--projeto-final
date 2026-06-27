@@ -5,6 +5,7 @@ class ClienteTMBD:
     def __init__(self):
         self._base_url = "https://api.themoviedb.org/3"
         self._headers = {"Authorization" : f"Bearer {os.getenv('TMDB_API_KEY')}", "accept" : "application/json"}
+        self._generos = None
 
     def buscar(self, keyword : str):
         url = self._base_url + "/search/multi"
@@ -16,7 +17,21 @@ class ClienteTMBD:
             return dados
         else:
             raise Exception(f"Erro: {response.status_code}")
-        
+    
+    def generos(self):
+        if self._generos:
+            return self._generos
+        url_filmes = self._base_url + "/genre/movie/list"
+        url_series = self._base_url + "/genre/tv/list"
+        params={"language": "pt-BR"}
+        filmes = requests.get(url_filmes, params=params, headers=self._headers).json()
+        series = requests.get(url_series, params=params, headers=self._headers).json()
+        mapa = {}
+        for g in filmes["genres"] + series["genres"]:
+            mapa[g["id"]] = g["name"]
+        self._generos = mapa
+        return mapa
+
     def trending(self):
         url = self._base_url + "/trending/all/day"
         params = {"language" : "pt-BR"}

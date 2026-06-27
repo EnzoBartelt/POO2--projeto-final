@@ -58,13 +58,19 @@ class Filme(Midia):
     
     def get_colecao(self):
         return self._colecao
+    
+    def set_duracao(self, duracao : int):
+        self._duracao = duracao
+
+    def set_colecao(self, colecao : str):
+        self._colecao = colecao
 
 class Serie(Midia):
-    def __init__ (self, tmdb_id : int, titulo : str, generos : list, descricao : str, avaliacoes : float, poster_path : str, data_lancamento : str, temporadas : int, episodios : int, ano_final : int, status : str):
+    def __init__ (self, tmdb_id : int, titulo : str, generos : list, descricao : str, avaliacoes : float, poster_path : str, data_lancamento : str, temporadas : int, episodios : int, ano_final : str, status : str):
         super().__init__(tmdb_id, titulo, generos, descricao, avaliacoes, poster_path, data_lancamento)
         self._temporadas = temporadas                        # Quantidade de temporadas (number_of_seasons)
         self._episodios = episodios                          # Quantidade de episódios (number_of_episodes)        
-        self._ano_final = ano_final                          # Ano do encerramento de exibição (último episódio) (last_air_date)
+        self._ano_final = ano_final                          # Data do encerramento de exibição (último episódio) (last_air_date)
         self._status = status                                # Status da produção (Encerrada/Ativa) (status)
 # --------------------------------------------------------------------------------------------------------------------------------------------
 #   GETTERS
@@ -81,6 +87,18 @@ class Serie(Midia):
     
     def get_status(self):
         return self._status
+    
+    def set_temporadas(self, temporadas : int):
+        self._temporadas = temporadas
+
+    def set_episodios(self, episodios : int):
+        self._episodios = episodios
+
+    def set_ano_final(self, ano_final : str):
+        self._ano_final = ano_final
+
+    def set_status(self, status : str):
+        self._status = status
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 #   SETTERS

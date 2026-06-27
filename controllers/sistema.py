@@ -4,6 +4,7 @@ from itertools import chain
 
 from models.midia import Midia, Filme, Serie
 from models.usuario import Usuario
+from models.avaliacao import Avaliacao
 
 from services.groq import ClienteGroq
 from services.tmdb import ClienteTMBD
@@ -53,6 +54,7 @@ class Sistema:
             if self._repositorio.validar_senha(senha, usuario.get_senha()):
                 self._usuario = usuario
                 self._id_usuario = id_usuario
+                self.carregar_midias()
                 print(f"Login efetuado com sucesso! Usuário {self._usuario.get_nome()} ativo.")
                 return True
         else:
@@ -62,52 +64,57 @@ class Sistema:
         self._usuario = None
         self._id_usuario = None
 
+    # Popula filmes_vistos do usuário e carrega o histórico para a interface
     def carregar_midias(self):
-        pass
+        filmes_vistos = self._repositorio.buscar_avaliacoes(self._id_usuario)
+        self._usuario.set_filmes_vistos(filmes_vistos)
+        self._historico = self._repositorio.buscar_historico(self._id_usuario)
+        return self._historico
+    
+    # Retorna a avaliação do usuário logado para uma mídia, ou None.
+    def get_avaliacao_usuario(self, tmdb_id: int) -> Avaliacao | None:
+        if not self._historico:
+            return None
+        dados = self._historico.get(tmdb_id)
+        if isinstance(dados, dict):
+            return dados.get("avaliacao")
+        return dados
+
+    # Cria ou atualiza avaliação, salva no banco e atualiza o histórico.
+    def avaliar(self, midia: Midia, nota: float, comentario: str) -> bool:
+        avaliacao = Avaliacao(nota, comentario)
+        sucesso = self._repositorio.salvar_avaliacao(self._id_usuario, midia, avaliacao)
+        if sucesso:
+            # Atualiza filmes_vistos do usuário
+            self._usuario.get_filmes_vistos()[midia.get_id()] = avaliacao
+            # Atualiza histórico da UI
+            if self._historico is None:
+                self._historico = {}
+            self._historico[midia.get_id()] = {"midia": midia, "avaliacao": avaliacao}
+        return sucesso
 
     def trending(self):
+        mapa_generos = self._cliente_tmdb.generos() 
+        trending = self._cliente_tmdb.trending()
         midias = []
 
         try:
-            trending = self._cliente_tmdb.trending()
-            for midia in trending["results"]:
-                generos = []
+            for item in trending["results"][:7]:
+                generos = [mapa_generos.get(gid, "") for gid in item.get("genre_ids", [])]
 
-                if midia["media_type"] == "movie":
-                    filme = self._cliente_tmdb.detalhes_filme(midia["id"])
-
-                    for g in filme["genres"]:
-                        generos.append(g["name"])
-
+                if item["media_type"] == "movie":
                     midias.append(Filme(
-                        filme["id"], 
-                        filme["original_title"], 
-                        generos,
-                        filme["overview"], 
-                        filme["vote_average"], 
-                        filme["poster_path"],
-                        filme["release_date"],
-                        filme["runtime"],
-                        filme["belongs_to_collection"]["name"] if filme["belongs_to_collection"] else None
+                        item["id"], item["title"], generos,
+                        item["overview"], item["vote_average"],
+                        item["poster_path"], item["release_date"],
+                        0, None
                     ))
-                elif midia["media_type"] == "tv":
-                    serie = self._cliente_tmdb.detalhes_serie(midia["id"])
-
-                    for g in serie["genres"]:
-                        generos.append(g["name"])
-
+                elif item["media_type"] == "tv":
                     midias.append(Serie(
-                        serie["id"],
-                        serie["original_name"],
-                        generos,
-                        serie["overview"],
-                        serie["vote_average"],
-                        serie["poster_path"],
-                        serie["first_air_date"],
-                        serie["number_of_seasons"],
-                        serie["number_of_episodes"],
-                        serie["last_air_date"],
-                        serie["status"]
+                        item["id"], item["name"], generos,
+                        item["overview"], item["vote_average"],
+                        item["poster_path"], item["first_air_date"],
+                        0, 0, None, item.get("status", "")
                     ))
 
             return midias
@@ -117,35 +124,24 @@ class Sistema:
             return None
 
     def upcoming(self):
+        mapa_generos = self._cliente_tmdb.generos()
+        dados = self._cliente_tmdb.upcoming()
         midias = []
 
         try:
-            upcoming = self._cliente_tmdb.upcoming()
-            for midia in upcoming["results"]:
-                generos = []
-
-                filme = self._cliente_tmdb.detalhes_filme(midia["id"])
-
-                for g in filme["genres"]:
-                    generos.append(g["name"])
-
+            for item in dados["results"][:7]:
+                generos = [mapa_generos.get(gid, "") for gid in item.get("genre_ids", [])]
                 midias.append(Filme(
-                    filme["id"], 
-                    filme["original_title"], 
-                    generos,
-                    filme["overview"], 
-                    filme["vote_average"], 
-                    filme["poster_path"],
-                    filme["release_date"],
-                    filme["runtime"],
-                    filme["belongs_to_collection"]["name"] if filme["belongs_to_collection"] else None
+                    item["id"], item["title"], generos,
+                    item.get("overview", ""), item.get("vote_average", 0),
+                    item.get("poster_path", ""), item.get("release_date", ""),
+                    0, None
                 ))
-
             return midias
         
         except Exception as e:
             print(e)
-            return None
+            return []
 
     def buscar(self, keyword: str):
         try:
@@ -153,9 +149,9 @@ class Sistema:
         except Exception as e:
             print(e)
             return
-        filmes = ()
-        series = ()
-        pessoas = ()
+        filmes = []
+        series = []
+        pessoas = []
 
         for resultado in response["results"]:
             match resultado["media_type"]:
@@ -179,50 +175,21 @@ class Sistema:
 
         pass
 
-    def encontrar(self, id: str) -> Midia:
-        response = self._cliente_tmdb.encontrar(id)
-        result = next(chain(response["movie_results"], response["tv_results"]))
-
-        if result["media_type"] == "movie":
-            return Filme(
-                result["id"],
-                result["title"],
-                # result["genres"],
-                [],
-                result["overview"],
-                result["vote_average"],
-                result["poster_path"],
-                result["release_date"],
-                # result["runtime"],
-                0,
-                # result["belongs_to_collection"]["name"],
-                "",
-            )
-        elif result["media_type"] == "tv":
-            return Serie(
-                result["id"],
-                result["name"],
-                # result["genres"],
-                [],
-                result["overview"],
-                result["vote_average"],
-                result["poster_path"],
-                result["first_air_date"],
-                # result["number_of_seasons"],
-                1,
-                # result["number_of_episodes"],
-                1,
-                # result["last_air_date"],
-                1,
-                # result["episode_run_time"],
-                1,
-                # result["status"],
-                "",
-            )
+    def detalhes_midia(self, midia : Midia) -> Midia:
+        if isinstance(midia, Filme):
+            response = self._cliente_tmdb.detalhes_filme(midia.get_id())
+            midia.set_duracao(response["runtime"])
+            midia.set_colecao(response["belongs_to_collection"]["name"])
+            return midia
+        elif isinstance(midia, Serie):
+            response = self._cliente_tmdb.detalhes_serie(midia.get_id())
+            midia.set_temporadas(response["number_of_seasons"])
+            midia.set_episodios(response["number_of_episodes"])
+            midia.set_ano_final(response["last_air_date"])
+            midia.set_status(response["status"])
+            return midia
         else:
-            raise Exception(
-                "Erro: API retornou resultado de tipo (media_type) desconhecido"
-            )
+            return midia
 
     def gerar_recomendacoes(self) -> list[Midia]:
         titles = [

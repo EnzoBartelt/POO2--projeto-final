@@ -176,7 +176,7 @@ class Repositorio:
         finally:
             cursor.close()
 
-    def salvar_avaliacao(self, usuario : Usuario, id_usuario : int, midia : Midia, avaliacao : Avaliacao):
+    def salvar_avaliacao(self, id_usuario : int, midia : Midia, avaliacao : Avaliacao):
         if not self.midia_existe(midia.get_id()):
             self.salvar_midia(midia)
 
@@ -190,12 +190,7 @@ class Repositorio:
         
         try:
             cursor = self._cursor()
-            cursor.execute(sql, (
-                id_usuario,
-                midia.get_id(),
-                avaliacao.get_nota(),
-                avaliacao.get_comentario()
-            ))
+            cursor.execute(sql, (id_usuario, midia.get_id(), avaliacao.get_nota(), avaliacao.get_comentario()))
             
             self._conexao.commit()
             return True
@@ -204,15 +199,16 @@ class Repositorio:
             self._conexao.rollback()
             print(f"[DB] Erro ao salvar avaliação: {e}")
             return False
-        
         finally:
             cursor.close()
 
     def buscar_avaliacoes(self, id_usuario : int):
         sql = """
-            SELECT a.id_midia, a.nota, a.comentario, m.titulo FROM avaliacao a
+            SELECT a.id_midia, a.nota, a.comentario, m.titulo, m.poster_path, m.data_lancamento
+            FROM avaliacao a
             JOIN midia m ON m.id_tmdb = a.id_midia
             WHERE a.id_usuario = %s
+            ORDER BY a.data_avaliacao DESC
             """
         
         try:
@@ -231,7 +227,76 @@ class Repositorio:
         except Exception as e:
             print(f"[DB] Erro ao carregar avaliações: {e}")
             return None
+        finally:
+            cursor.close()
+
+    # Retorna {id_midia: {"midia": Midia, "avaliacao": Avaliacao}}, preciso para a interface
+    def buscar_historico(self, id_usuario: int) -> dict:
+        sql = """
+            SELECT a.id_midia, a.nota, a.comentario,
+                m.titulo, m.poster_path, m.data_lancamento, m.descricao
+            FROM avaliacao a
+            JOIN midia m ON m.id_tmdb = a.id_midia
+            WHERE a.id_usuario = %s
+            ORDER BY a.data_avaliacao DESC
+        """
+
+        sql_generos = """
+            SELECT g.nome
+            FROM midia_genero mg
+            JOIN genero g ON mg.id_genero = g.id_genero
+            WHERE mg.id_midia = %s
+        """
+
+        try:
+            cursor = self._cursor()
+            cursor.execute(sql, (id_usuario,))
+            rows = cursor.fetchall()
+            resultado = {}
+            for row in rows:
+                generos = []
+                cursor.execute(sql_generos, (row["id_midia"],))
+                todos_generos = cursor.fetchall()
+                for genero in todos_generos:
+                    generos.append(genero["nome"])
+                
+                cursor.execute("SELECT f.duracao, f.colecao FROM filme f WHERE id_tmdb = %s", (row["id_midia"],))
+                filme = cursor.fetchone()
+                if filme:
+                    midia = Filme(
+                    tmdb_id = row["id_midia"],
+                    titulo = row["titulo"],
+                    poster_path = row["poster_path"],
+                    data_lancamento = row["data_lancamento"],
+                    generos = generos,
+                    descricao = row["descricao"],
+                    avaliacoes = None,
+                    duracao= filme["duracao"],
+                    colecao= filme["colecao"]
+                    )
+                else:
+                    cursor.execute("SELECT s.temporadas, s.episodios, s.data_final, s.status FROM serie s WHERE id_tmdb = %s", (row["id_midia"],))
+                    serie = cursor.fetchone()
+                    midia = Serie(
+                    tmdb_id = row["id_midia"],
+                    titulo = row["titulo"],
+                    poster_path = row["poster_path"],
+                    data_lancamento = row["data_lancamento"],
+                    generos = generos,
+                    descricao = row["descricao"],
+                    avaliacoes = None,
+                    temporadas= serie["temporadas"],
+                    episodios= serie["episodios"],
+                    ano_final= serie["data_final"],
+                    status= serie["status"]
+                    )
+                avaliacao = Avaliacao(row["nota"], row["comentario"])
+                resultado[row["id_midia"]] = {"midia": midia, "avaliacao": avaliacao}
+            return resultado
         
+        except Exception as e:
+            print(f"[DB] Erro ao carregar histórico: {e}")
+            return {}
         finally:
             cursor.close()
 

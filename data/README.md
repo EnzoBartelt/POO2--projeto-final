@@ -37,7 +37,6 @@ CREATE TABLE serie (
     temporadas INT,
     episodios INT,
     data_final DATE,
-    avaliacao_temporadas FLOAT,
     status VARCHAR(20),
     FOREIGN KEY (id_tmdb) REFERENCES midia(id_tmdb)
 		ON UPDATE CASCADE ON DELETE CASCADE
