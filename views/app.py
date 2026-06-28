@@ -5,6 +5,7 @@ from tkinter.ttk import *
 import customtkinter as ctk
 import re
 import threading
+from queue import Empty, Queue
 import requests
 from PIL import Image, ImageTk
 from io import BytesIO
@@ -310,6 +311,7 @@ class PainelEsquerdo(ctk.CTkFrame):
         self._n = 9
         self._pai = pai
         self._sistema = sistema
+        self._fila_historico = Queue()
         self.grid_propagate(False)
         self._carregar()
 
@@ -336,13 +338,26 @@ class PainelEsquerdo(ctk.CTkFrame):
     def _carregar_historico(self):
         thread = threading.Thread(target=self._worker_historico, daemon=True)
         thread.start()
+        self.after(100, self._verificar_historico)
 
     def _worker_historico(self):
         try:
             historico = self._sistema.carregar_midias()
-            self.after(0, self._exibir_historico, historico)
+            self._fila_historico.put(("ok", historico))
         except Exception as e:
-            print(f"Erro ao carregar histórico: {e}")
+            self._fila_historico.put(("erro", e))
+
+    def _verificar_historico(self):
+        try:
+            status, resultado = self._fila_historico.get_nowait()
+        except Empty:
+            self.after(100, self._verificar_historico)
+            return
+
+        if status == "ok":
+            self._exibir_historico(resultado)
+        else:
+            print(f"Erro ao carregar histórico: {resultado}")
 
     def _exibir_historico(self, historico: dict):
         for widget in self._frame_cards.winfo_children():
@@ -380,6 +395,7 @@ class CardHistorico(ctk.CTkFrame):
         self._avaliacao = avaliacao
         self._comando   = comando
         self._img_ref   = None
+        self._fila_poster = Queue()
         self._construir()
         self._carregar_poster()
 
@@ -409,6 +425,7 @@ class CardHistorico(ctk.CTkFrame):
             return
         thread = threading.Thread(target=self._worker_poster, args=(path,), daemon=True)
         thread.start()
+        self.after(100, self._verificar_poster)
 
     def _worker_poster(self, path):
         try:
@@ -417,13 +434,23 @@ class CardHistorico(ctk.CTkFrame):
             resposta.raise_for_status()
             imagem = Image.open(BytesIO(resposta.content))
             imagem = imagem.resize((self._largura, self._altura))
-            ctk_img = ctk.CTkImage(light_image=imagem, dark_image=imagem, size=(self._largura, self._altura))
-            self.after(0, self._aplicar_poster, ctk_img)
-        except Exception:
-            pass
+            self._fila_poster.put(("ok", imagem))
+        except Exception as e:
+            self._fila_poster.put(("erro", e))
 
-    def _aplicar_poster(self, ctk_img):
+    def _verificar_poster(self):
         try:
+            status, resultado = self._fila_poster.get_nowait()
+        except Empty:
+            self.after(100, self._verificar_poster)
+            return
+
+        if status == "ok":
+            self._aplicar_poster(resultado)
+
+    def _aplicar_poster(self, imagem):
+        try:
+            ctk_img = ctk.CTkImage(light_image=imagem, dark_image=imagem, size=(self._largura, self._altura))
             self._img_ref = ctk_img
             self._label_poster.configure(image=ctk_img, text="")
         except Exception:
@@ -434,6 +461,8 @@ class PainelDireito(ctk.CTkFrame):
         super().__init__(pai)
         self._pai = pai
         self._sistema = sistema
+        self._fila_carregamento = Queue()
+        self._fila_busca = Queue()
         self._carregar()
     
     def _carregar(self):
@@ -468,6 +497,7 @@ class PainelDireito(ctk.CTkFrame):
     def _carregar_inicial(self):
         thread = threading.Thread(target=self._worker_inicial, daemon=True)
         thread.start()
+        self.after(100, self._verificar_carregamento)
 
     def _worker_inicial(self):
         tentativas = 3
@@ -475,19 +505,30 @@ class PainelDireito(ctk.CTkFrame):
             try:
                 trending = self._sistema.trending()
                 upcoming = self._sistema.upcoming()
-                self.after(0, self._exibir_inicial, trending, upcoming)
+                self._fila_carregamento.put(("ok", trending, upcoming))
                 return
             except Exception as e:
                 if i < tentativas - 1:
-                    sleep(2) 
+                    sleep(2)
                 else:
-                    self.after(0, self._label_status.configure,
-                            {"text": "Serviço temporariamente indisponível. Tente novamente."})
+                    self._fila_carregamento.put(("erro", e))
 
-    def _exibir_inicial(self, trending, upcoming):
-        self._label_status.destroy()
-        self._secao_trending.exibir(trending, comando=self._ao_clicar)
-        self._secao_upcoming.exibir(upcoming, comando=self._ao_clicar)
+    def _verificar_carregamento(self):
+        try:
+            resultado = self._fila_carregamento.get_nowait()
+        except Empty:
+            self.after(100, self._verificar_carregamento)
+            return
+
+        if resultado[0] == "ok":
+            _, trending, upcoming = resultado
+            self._label_status.destroy()
+            self._secao_trending.exibir(trending or [], comando=self._ao_clicar)
+            self._secao_upcoming.exibir(upcoming or [], comando=self._ao_clicar)
+        else:
+            _, erro = resultado
+            print(f"Erro ao carregar mídias iniciais: {erro}")
+            self._label_status.configure(text="Serviço temporariamente indisponível. Tente novamente.")
 
     def _ao_clicar(self, midia):
         PaginaMidia(self._pai, sistema=self._sistema, midia=midia)
@@ -510,20 +551,35 @@ class PainelDireito(ctk.CTkFrame):
     def _carregar_busca(self, entry : str):
         thread = threading.Thread(target=lambda: self._worker_busca(entry), daemon=True)
         thread.start()
+        self.after(100, self._verificar_busca)
 
     def _worker_busca(self, entry : str):
         tentativas = 3
         for i in range(tentativas):
             try:
                 resultado = self._sistema.buscar(entry)
-                self.after(0, self._exibir_resultados, resultado)
+                self._fila_busca.put(("ok", resultado))
                 return
             except Exception as e:
                 if i < tentativas - 1:
                     sleep(2) 
                 else:
-                    self.after(0, self._label_status.configure,
-                            {"text": "Serviço temporariamente indisponível. Tente novamente."})
+                    self._fila_busca.put(("erro", e))
+
+    def _verificar_busca(self):
+        try:
+            resultado = self._fila_busca.get_nowait()
+        except Empty:
+            self.after(100, self._verificar_busca)
+            return
+
+        if resultado[0] == "ok":
+            _, midias = resultado
+            self._exibir_resultados(midias)
+        else:
+            _, erro = resultado
+            print(f"Erro ao buscar mídias: {erro}")
+            self._label_status.configure(text="Serviço temporariamente indisponível. Tente novamente.")
                     
     def _exibir_resultados(self, midias):
         if hasattr(self, "_frame_resultados"):
@@ -551,6 +607,7 @@ class CardMidia(ctk.CTkFrame):
         self._midia   = midia
         self._comando = comando
         self._img_ref = None
+        self._fila_poster = Queue()
         self._construir()
         self._carregar_poster()
 
@@ -584,6 +641,7 @@ class CardMidia(ctk.CTkFrame):
             return
         thread = threading.Thread(target=self._worker_poster, args=(path,), daemon=True)
         thread.start()
+        self.after(100, self._verificar_poster)
 
     def _worker_poster(self, path):
         try:
@@ -592,13 +650,23 @@ class CardMidia(ctk.CTkFrame):
             resposta.raise_for_status()
             imagem = Image.open(BytesIO(resposta.content))
             imagem = imagem.resize((self._largura, self._altura))
-            ctk_img = ctk.CTkImage(light_image=imagem, dark_image=imagem, size=(self._largura, self._altura))
-            self.after(0, self._aplicar_poster, ctk_img)
-        except Exception:
-            pass
+            self._fila_poster.put(("ok", imagem))
+        except Exception as e:
+            self._fila_poster.put(("erro", e))
 
-    def _aplicar_poster(self, ctk_img):
+    def _verificar_poster(self):
         try:
+            status, resultado = self._fila_poster.get_nowait()
+        except Empty:
+            self.after(100, self._verificar_poster)
+            return
+
+        if status == "ok":
+            self._aplicar_poster(resultado)
+
+    def _aplicar_poster(self, imagem):
+        try:
+            ctk_img = ctk.CTkImage(light_image=imagem, dark_image=imagem, size=(self._largura, self._altura))
             self._img_ref = ctk_img
             self._label_poster.configure(image=ctk_img, text="")
         except Exception:
@@ -628,6 +696,14 @@ class SecaoMidias(ctk.CTkFrame):
         for widget in self._frame_cards.winfo_children():
             widget.destroy()
 
+        if not midias:
+            ctk.CTkLabel(
+                self._frame_cards,
+                text="Nenhuma mídia encontrada.",
+                text_color="gray",
+            ).grid(row=0, column=0, columnspan=self._n, pady=12)
+            return
+
         for i, midia in enumerate(midias[:self._n]):
             card = CardMidia(self._frame_cards, midia, comando=comando)
             card.grid(row=0, column=i, padx=2, pady=5, sticky="n")
@@ -641,6 +717,7 @@ class PaginaMidia(ctk.CTkToplevel):
         self._midia = self._sistema.detalhes_midia(midia)
         self._callback_avaliacao = pai.esquerdo.atualizar
         self._img_ref = None
+        self._fila_poster = Queue()
 
         self.title(midia.get_titulo())
         self.geometry("600x600")
@@ -845,6 +922,7 @@ class PaginaMidia(ctk.CTkToplevel):
             return
         thread = threading.Thread(target=self._worker_poster, args=(path,), daemon=True)
         thread.start()
+        self.after(100, self._verificar_poster)
 
     def _worker_poster(self, path):
         try:
@@ -853,13 +931,23 @@ class PaginaMidia(ctk.CTkToplevel):
             resposta.raise_for_status()
             imagem = Image.open(BytesIO(resposta.content))
             imagem = imagem.resize((self._largura, self._altura))
-            ctk_img = ctk.CTkImage(light_image=imagem, dark_image=imagem, size=(self._largura, self._altura))
-            self.after(0, self._aplicar_poster, ctk_img)
-        except Exception:
-            pass
+            self._fila_poster.put(("ok", imagem))
+        except Exception as e:
+            self._fila_poster.put(("erro", e))
 
-    def _aplicar_poster(self, ctk_img):
+    def _verificar_poster(self):
         try:
+            status, resultado = self._fila_poster.get_nowait()
+        except Empty:
+            self.after(100, self._verificar_poster)
+            return
+
+        if status == "ok":
+            self._aplicar_poster(resultado)
+
+    def _aplicar_poster(self, imagem):
+        try:
+            ctk_img = ctk.CTkImage(light_image=imagem, dark_image=imagem, size=(self._largura, self._altura))
             self._img_ref = ctk_img
             self._label_poster.configure(image=ctk_img, text="")
         except Exception:
