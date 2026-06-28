@@ -200,21 +200,113 @@ class TelaPrincipal(ctk.CTkFrame):
 
     def _construir_layout(self):
         self.grid_rowconfigure(1, weight=1)
-        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=0, minsize=290)
         self.grid_columnconfigure(1, weight=2)
 
         hotbar = ctk.CTkFrame(self, height=60)
         hotbar.grid(row=0, column=0, columnspan=2, sticky="nsew")
         hotbar.grid_propagate(False)
 
+        self._construir_hotbar(hotbar)
+
         self.esquerdo = PainelEsquerdo(self, self._sistema)
         self.esquerdo.grid(row=1, column=0, sticky="nsew", padx=(10, 5), pady=10)
         self.direito = PainelDireito(self, self._sistema)
         self.direito.grid(row=1, column=1, sticky="nsew", padx=(5, 10), pady=10)
 
+    def _construir_hotbar(self, hotbar):
+        self._menu_aberto = False
+        self._janela_menu = None
+
+        hotbar.grid_columnconfigure(1, weight=1)
+
+        # ── Esquerda: ícone de menu ──
+        icone_menu = ctk.CTkButton(
+            hotbar,
+            text="☰",
+            width=48, height=48,
+            fg_color="transparent",
+            hover_color="#333333",
+            command=self._toggle_menu
+        )
+        icone_menu.grid(row=0, column=0, padx=(8, 0), pady=6)
+
+        # ── Direita: ícone casa e botão recomendar ──
+        frame_direita = ctk.CTkFrame(hotbar, fg_color="transparent")
+        frame_direita.grid(row=0, column=2, padx=(0, 8), pady=6)
+
+        self._btn_casa = ctk.CTkButton(
+            frame_direita,
+            text="⌂",
+            font=("Arial", 20),
+            width=48, height=48,
+            fg_color="transparent",
+            hover_color="#333333",
+            command=self._ir_para_inicio
+        )
+        self._btn_casa.pack(side="left", padx=(0, 4))
+
+        ctk.CTkButton(
+            frame_direita,
+            text="Recomendar",
+            height=36,
+            command=self._abrir_painel_recomendacoes
+        ).pack(side="left")
+
+    def _toggle_menu(self):
+        if self._menu_aberto and self._janela_menu and self._janela_menu.winfo_exists():
+            self._janela_menu.destroy()
+            self._menu_aberto = False
+            return
+
+        self._janela_menu = ctk.CTkToplevel(self)
+        self._janela_menu.overrideredirect(True)   # sem borda/título
+        self._janela_menu.attributes("-topmost", True)
+
+        # Posiciona abaixo do botão de menu (canto superior esquerdo)
+        x = self.winfo_rootx() + 8
+        y = self.winfo_rooty() + 60
+        self._janela_menu.geometry(f"180x50+{x}+{y}")
+
+        ctk.CTkButton(
+            self._janela_menu,
+            text="Deslogar",
+            fg_color="transparent",
+            hover_color="#333333",
+            anchor="w",
+            command=self._deslogar
+        ).pack(fill="x", padx=4, pady=4)
+
+        self._menu_aberto = True
+        self._janela_menu.bind("<FocusOut>", lambda e: self._fechar_menu())
+
+    def _fechar_menu(self):
+        if self._janela_menu and self._janela_menu.winfo_exists():
+            self._janela_menu.destroy()
+        self._menu_aberto = False
+
+    def _deslogar(self):
+        self._fechar_menu()
+        self._sistema.deslogar()
+        self._app._mostrar_tela("login")
+
+    def _ir_para_inicio(self):
+        if hasattr(self, "_no_inicio") and self._no_inicio:
+            return
+        self.direito.destroy()
+        self.direito = PainelDireito(self, self._sistema)
+        self.direito.grid(row=1, column=1, sticky="nsew", padx=(5, 10), pady=10)
+        self._no_inicio = True
+
+    def _abrir_painel_recomendacoes(self):
+        self.direito.destroy()
+        self.direito = PainelRecomendacoes(self, self._sistema)  # a implementar
+        self.direito.grid(row=1, column=1, sticky="nsew", padx=(5, 10), pady=10)
+        self._no_inicio = False
+
 class PainelEsquerdo(ctk.CTkFrame):
     def __init__(self, pai : ctk.CTkFrame, sistema : Sistema):
-        super().__init__(pai)
+        super().__init__(pai, width=290)
         self._n = 9
         self._pai = pai
         self._sistema = sistema
@@ -236,7 +328,7 @@ class PainelEsquerdo(ctk.CTkFrame):
         entry_buscar = ctk.CTkEntry(self, placeholder_text="Pesquise por filmes ou séries", height=40, width=600)
         entry_buscar.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
 
-        botao_buscar = ctk.CTkButton(self, text="Buscar", width=100, height=40, command=lambda: self._buscar(self, entry_buscar))
+        botao_buscar = ctk.CTkButton(self, text="Buscar", width=60, height=40, command=lambda: self._buscar(entry_buscar))
         botao_buscar.grid(row=2, column=1, sticky="e", padx=(5, 10), pady=10)
 
         self.after(100, self._carregar_historico)
@@ -268,7 +360,12 @@ class PainelEsquerdo(ctk.CTkFrame):
         PaginaMidia(self._pai, sistema=self._sistema, midia=midia)
 
     def _buscar(self, entry):
-        pass
+        keyword = entry.get().strip()
+        if not keyword:
+            historico = self._sistema.carregar_midias()
+        else:
+            historico = self._sistema.buscar_historico(keyword)
+        self._exibir_historico(historico)
 
     # Chamado externamente após o usuário fazer uma nova avaliação.
     def atualizar(self):
@@ -340,13 +437,18 @@ class PainelDireito(ctk.CTkFrame):
         self._carregar()
     
     def _carregar(self):
+        for widget in self.winfo_children():
+            widget.destroy()
+
         self.grid_rowconfigure(0, weight=0)
+        self.grid_rowconfigure(1, weight=0)
+        self.grid_rowconfigure(2, weight=1) 
         self.grid_columnconfigure(0, weight=1)
 
         entry_buscar = ctk.CTkEntry(self, placeholder_text="Pesquise por filmes ou séries", height=40, width=600)
         entry_buscar.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
 
-        botao_buscar = ctk.CTkButton(self, text="Buscar", width=100, height=40, command=lambda: self._buscar(self, entry_buscar))
+        botao_buscar = ctk.CTkButton(self, text="Buscar", width=100, height=40, command=lambda: self._verifica_pagina(entry_buscar))
         botao_buscar.grid(row=0, column=1, sticky="e", padx=(5, 10), pady=10)
 
         self._label_status = ctk.CTkLabel(self, text="Carregando...", text_color="gray")
@@ -390,17 +492,56 @@ class PainelDireito(ctk.CTkFrame):
     def _ao_clicar(self, midia):
         PaginaMidia(self._pai, sistema=self._sistema, midia=midia)
 
+    def _verifica_pagina(self, entry):
+        if not entry.get():
+            if self._secao_trending.winfo_exists() or self._secao_upcoming.winfo_exists():
+                return
+            self._carregar()
+            return
+        
+        self._buscar(entry)
+
+    def _buscar(self, entry):
+        self._label_status.destroy()
+        self._secao_trending.destroy()
+        self._secao_upcoming.destroy()
+        self.after(100, self._carregar_busca, entry.get())
+
+    def _carregar_busca(self, entry : str):
+        thread = threading.Thread(target=lambda: self._worker_busca(entry), daemon=True)
+        thread.start()
+
+    def _worker_busca(self, entry : str):
+        tentativas = 3
+        for i in range(tentativas):
+            try:
+                resultado = self._sistema.buscar(entry)
+                self.after(0, self._exibir_resultados, resultado)
+                return
+            except Exception as e:
+                if i < tentativas - 1:
+                    sleep(2) 
+                else:
+                    self.after(0, self._label_status.configure,
+                            {"text": "Serviço temporariamente indisponível. Tente novamente."})
+                    
     def _exibir_resultados(self, midias):
-        self._label_status.grid_remove()
+        if hasattr(self, "_frame_resultados"):
+            self._frame_resultados.destroy()
+
+        self._frame_resultados = ctk.CTkScrollableFrame(self, fg_color="transparent", height=640)
+        self._frame_resultados.grid(row=1, column=0, columnspan=2, sticky="nsew")
 
         for widget in self._frame_resultados.winfo_children():
             widget.destroy()
 
-        for midia in midias:
-            ctk.CTkLabel(self._frame_resultados, text=midia.get_titulo()).pack(anchor="w", pady=2)
-
-    def _buscar(self, frame, entry):
-        pass
+        for j in range(0, 3):
+            for i in range(0, 7):
+                index = i + (j * 7)
+                midia = midias[index] if index < len(midias) else None
+                if midia:
+                    card = CardMidia(self._frame_resultados, midia, comando=self._ao_clicar)
+                    card.grid(row=j, column=i, padx=5, pady=5, sticky="n")
 
 class CardMidia(ctk.CTkFrame):
     def __init__(self, pai, midia, comando=None):
@@ -482,12 +623,14 @@ class SecaoMidias(ctk.CTkFrame):
             self._frame_cards.grid_columnconfigure(i, weight=1, uniform="card", minsize=130)
 
     def exibir(self, midias: list, comando=None):
+        if not self._frame_cards or not self._frame_cards.winfo_exists():
+            return 
         for widget in self._frame_cards.winfo_children():
             widget.destroy()
 
         for i, midia in enumerate(midias[:self._n]):
             card = CardMidia(self._frame_cards, midia, comando=comando)
-            card.grid(row=0, column=i, padx=5, pady=5, sticky="n")
+            card.grid(row=0, column=i, padx=2, pady=5, sticky="n")
 
 class PaginaMidia(ctk.CTkToplevel):
     def __init__(self, pai, sistema: Sistema, midia: Midia):
@@ -599,7 +742,7 @@ class PaginaMidia(ctk.CTkToplevel):
             widget.destroy()
 
         if self._avaliacao and self._avaliacao.get_comentario():
-            ctk.CTkLabel(self._frame_rodape, text=f'"{self._avaliacao.get_comentario()}"', font=("Arial", 12, "italic"), text_color="gray", wraplength=640, justify="center").grid(row=0, column=0, pady=(0, 4))
+            ctk.CTkLabel(self._frame_rodape, text=f'"{self._avaliacao.get_comentario()}"', font=("Arial", 12, "italic"), text_color="gray", wraplength=500, justify="center").grid(row=0, column=0, pady=(0, 4))
 
     # -------------------------------------------------------------------------
     #   BOTÃO DE AÇÃO (Avaliar / Editar)
@@ -631,7 +774,7 @@ class PaginaMidia(ctk.CTkToplevel):
         frame_slider = ctk.CTkFrame(self._frame_acao, fg_color="transparent")
         frame_slider.pack(fill="x", pady=(2, 8))
 
-        self._slider = ctk.CTkSlider(frame_slider, from_=0, to=5, number_of_steps=10, variable=self._var_nota, width=200, command=self._atualizar_label_nota)
+        self._slider = ctk.CTkSlider(frame_slider, from_=0, to=10, number_of_steps=20, variable=self._var_nota, width=200, command=self._atualizar_label_nota)
         self._slider.pack(side="left")
 
         self._label_nota_slider = ctk.CTkLabel(frame_slider, text=f"★ {nota_inicial:.1f}", font=("Arial", 13, "bold"), text_color="#f5c518", width=50)
@@ -643,7 +786,7 @@ class PaginaMidia(ctk.CTkToplevel):
 
         comentario_inicial = self._avaliacao.get_comentario() if self._avaliacao else ""
 
-        self._entry_comentario = ctk.CTkTextbox(self._frame_rodape, height=60, wrap="word")
+        self._entry_comentario = ctk.CTkTextbox(self._frame_rodape, height=120, wrap="word")
         self._entry_comentario.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         self._entry_comentario.insert("0.0", comentario_inicial)
 
@@ -721,3 +864,9 @@ class PaginaMidia(ctk.CTkToplevel):
             self._label_poster.configure(image=ctk_img, text="")
         except Exception:
             pass    
+
+class PainelRecomendacoes(ctk.CTkFrame):
+    def __init__(self, pai, sistema):
+        super().__init__(pai)
+        self._sistema = sistema
+        ctk.CTkLabel(self, text="A fazer", text_color="gray").pack(expand=True)

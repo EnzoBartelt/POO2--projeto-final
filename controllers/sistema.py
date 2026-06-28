@@ -1,6 +1,7 @@
 import json
 import re
 from itertools import chain
+from difflib import SequenceMatcher
 
 from models.midia import Midia, Filme, Serie
 from models.usuario import Usuario
@@ -143,28 +144,63 @@ class Sistema:
             print(e)
             return []
 
-    def buscar(self, keyword: str):
+    def buscar(self, keyword: str, page : int = 1):
         try:
-            response = self._cliente_tmdb.buscar(keyword)
+            response = self._cliente_tmdb.buscar(keyword, page)
         except Exception as e:
             print(e)
             return
-        filmes = []
-        series = []
-        pessoas = []
+        
+        mapa_generos = self._cliente_tmdb.generos()
+        midias = []
 
         for resultado in response["results"]:
+            generos = [mapa_generos.get(gid, "") for gid in resultado.get("genre_ids", [])]
+
             match resultado["media_type"]:
                 case "movie":
-                    filmes.append(resultado)
+                    midias.append(Filme(
+                        resultado["id"], 
+                        resultado["title"], 
+                        generos,
+                        resultado["overview"], 
+                        resultado["vote_average"],
+                        resultado["poster_path"], 
+                        resultado["release_date"],
+                        0, None
+                    ))
                 case "tv":
-                    series.append(resultado)
+                    midias.append(Serie(
+                        resultado["id"], 
+                        resultado["name"],
+                        generos,
+                        resultado["overview"], 
+                        resultado["vote_average"],
+                        resultado["poster_path"], 
+                        resultado["first_air_date"],
+                        0, 0, None, resultado.get("status", "")
+                    ))
                 case "person":
-                    pessoas.append(resultado)
+                    pass
                 case _:
                     raise Exception(
                         "Erro: API retornou resultado de tipo (media_type) desconhecido"
                     )
+                
+        return midias
+
+    def buscar_historico(self, keyword: str) -> dict:
+        if not self._historico or not keyword:
+            return self._historico or {}
+        
+        keyword = keyword.lower().strip()
+
+        limiar = 0.5 
+
+        resultados = {tmdb_id: dados for tmdb_id, dados in self._historico.items() if similaridade(keyword, dados["midia"].get_titulo()) >= limiar}
+
+        # Ordena do mais similar para o menos
+        return dict(sorted(resultados.items(), key=lambda e: similaridade(keyword, e[1]["midia"].get_titulo()), reverse=True))
 
     def descobrir(self):
         try:
@@ -179,7 +215,7 @@ class Sistema:
         if isinstance(midia, Filme):
             response = self._cliente_tmdb.detalhes_filme(midia.get_id())
             midia.set_duracao(response["runtime"])
-            midia.set_colecao(response["belongs_to_collection"]["name"])
+            midia.set_colecao(response["belongs_to_collection"]["name"]) if response["belongs_to_collection"] else None
             return midia
         elif isinstance(midia, Serie):
             response = self._cliente_tmdb.detalhes_serie(midia.get_id())
@@ -241,3 +277,14 @@ def classificar_entrada(texto: str) -> str:
         return "nome"
 
     return "invalido"
+
+def similaridade(keyword : str, titulo: str) -> float:
+            titulo = titulo.lower()
+
+            # Pontuação máxima entre: string inteira vs substring por palavra
+            ratio_total = SequenceMatcher(None, keyword, titulo).ratio()
+            ratio_palavras = max(
+                SequenceMatcher(None, keyword, palavra).ratio()
+                for palavra in titulo.split()
+            )
+            return max(ratio_total, ratio_palavras)

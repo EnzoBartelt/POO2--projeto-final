@@ -55,7 +55,7 @@ CREATE TABLE midia_genero (
 CREATE TABLE avaliacao (
 	id_usuario INT NOT NULL,
     id_midia INT NOT NULL,
-    nota DECIMAL(2,1) CHECK (0 <= nota <= 5),
+    nota DECIMAL(3,1) CHECK (0 <= nota AND nota <= 10),
     comentario TEXT,
     data_avaliacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id_usuario, id_midia),

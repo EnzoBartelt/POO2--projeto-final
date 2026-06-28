@@ -7,9 +7,9 @@ class ClienteTMBD:
         self._headers = {"Authorization" : f"Bearer {os.getenv('TMDB_API_KEY')}", "accept" : "application/json"}
         self._generos = None
 
-    def buscar(self, keyword : str):
+    def buscar(self, keyword : str, page : int = 1):
         url = self._base_url + "/search/multi"
-        params = {"query" : keyword, "language" : "pt-BR"}
+        params = {"query" : keyword, "language" : "pt-BR", "page" : page}
         response = requests.get(url, params=params, headers=self._headers)
 
         if response.status_code == 200:
@@ -54,7 +54,8 @@ class ClienteTMBD:
 
     def detalhes_filme(self, id : int):
         url = self._base_url + f"/movie/{id}"
-        response = requests.get(url, headers=self._headers)
+        params = {"language" : "pt-BR"}
+        response = requests.get(url, params=params, headers=self._headers)
 
         if response.status_code == 200:
             return response.json()
@@ -63,7 +64,8 @@ class ClienteTMBD:
 
     def detalhes_serie(self, id : int):
         url = self._base_url + f"/tv/{id}"
-        response = requests.get(url, headers=self._headers)
+        params = {"language" : "pt-BR"}
+        response = requests.get(url, params=params, headers=self._headers)
 
         if response.status_code == 200:
             return response.json()
