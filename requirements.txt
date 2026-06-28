@@ -1,2 +1,6 @@
+bcrypt>=5.0.0
+customtkinter>=6.0.0
+mysql-connector-python>=9.7.0
+pillow>=12.2.0
 python-dotenv>=1.2.2
 requests>=2.34.2
