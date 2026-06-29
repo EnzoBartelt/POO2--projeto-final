@@ -202,7 +202,7 @@ class Sistema:
         # Ordena do mais similar para o menos
         return dict(sorted(resultados.items(), key=lambda e: similaridade(keyword, e[1]["midia"].get_titulo()), reverse=True))
 
-    def descobrir(self):
+    def descobrir(self, prompt_usuario : str = None):
         historico = getattr(self, "_historico", None) or self.carregar_midias()
         if not historico:
             return []
@@ -220,24 +220,36 @@ class Sistema:
             tipo = "filme" if isinstance(midia, Filme) else "série"
             comentario = avaliacao.get_comentario()
             contexto.append(
-                f"- {midia.get_titulo()} ({tipo}); nota do usuário: {avaliacao.get_nota():.1f}; comentário: {comentario}"
+                f"({midia.get_titulo()} | {tipo} | {avaliacao.get_nota():.1f} | {comentario} | {midia.get_generos()})"
             )
 
         prompt = f"""
-        Com base nas mídias que este usuário avaliou melhor, recomende até 5 filmes ou séries.
-        Evite recomendar os mesmos títulos já listados.
+            Você é um especialista em recomendações de filmes e séries.
 
-        Histórico:
-        {"\n".join(contexto)}
+            O usuário assistiu as seguintes mídias (título | tipo | nota | opinião | gêneros):
+            {"\n".join(contexto)}
 
-        Responda somente com JSON válido, sem texto extra, no formato:
-        [
-          {{"titulo": "Arrival", "tipo": "movie"}},
-          {{"titulo": "Dark", "tipo": "tv"}},
-          ...
-        ]
+            Analise o histórico considerando:
+            1. As notas dadas pelo usuário (peso maior para notas altas)
+            2. Os gêneros mais assistidos e a média de avaliação por gênero
+            3. A opinião popular (avaliação geral do público) sobre títulos semelhantes
 
-        Use "movie" para filmes e "tv" para séries.
+            Pedido do usuário: "{prompt_usuario}"
+
+            Leve o pedido do usuário como fator prioritário na seleção, mas combine com o perfil de gosto identificado acima. Ignorar se vazio.
+
+            Recomende até 5 filmes ou séries que o usuário ainda NÃO assistiu (evite qualquer título já listado no histórico).
+
+            Responda SOMENTE com JSON válido, sem texto extra, sem markdown, sem blocos de código, no formato:
+            {{
+            "mensagem": "Texto de até 500 palavras justificando as recomendações com base no perfil do usuário e no pedido feito. Direcionado ao usuário.",
+            "recomendacoes": [
+                {{"titulo": "titulo_do_filme", "tipo": "movie"}},
+                {{"titulo": "titulo_da_serie", "tipo": "tv"}}
+            ]
+            }}
+
+            Use "movie" para filmes e "tv" para séries.
         """
 
         try:
@@ -247,8 +259,11 @@ class Sistema:
             print(f"[GROQ] Erro ao gerar recomendações: {e}")
             return []
 
+        return sugestoes
+    
+    def gerar_recomendacoes(self, sugestoes):
         recomendacoes = []
-        for sugestao in sugestoes:
+        for sugestao in sugestoes["recomendacoes"]:
             try:
                 for midia in self.buscar(sugestao["titulo"]):
                     if sugestao["tipo"] == "movie" and isinstance(midia, Filme):

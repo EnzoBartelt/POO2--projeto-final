@@ -14,7 +14,6 @@ TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w200"
 
 ctk.set_appearance_mode("dark")
 
-
 class App(ctk.CTk):
     def __init__ (self):
         super().__init__()
@@ -282,7 +281,7 @@ class TelaPrincipal(ctk.CTkFrame):
 class PainelEsquerdo(ctk.CTkFrame):
     def __init__(self, pai : ctk.CTkFrame, sistema : Sistema):
         super().__init__(pai, width=290)
-        self._n = 9
+        self._n = 7
         self._pai = pai
         self._sistema = sistema
         self._fila_historico = Queue()
@@ -297,8 +296,8 @@ class PainelEsquerdo(ctk.CTkFrame):
 
         ctk.CTkLabel(self, text="Assistidos", font=("Arial", 15, "bold"), anchor="w").grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(12, 4))
 
-        self._frame_cards = ctk.CTkFrame(self, fg_color="transparent")
-        self._frame_cards.grid(row=1, column=0, columnspan=2, sticky="new", padx=6, pady=(0, 6))
+        self._frame_cards = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._frame_cards.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=6, pady=(0, 6))
         self._frame_cards.grid_columnconfigure(0, weight=1)
 
         entry_buscar = ctk.CTkEntry(self, placeholder_text="Pesquise por filmes ou séries", height=40, width=600)
@@ -341,7 +340,7 @@ class PainelEsquerdo(ctk.CTkFrame):
             ctk.CTkLabel(self._frame_cards, text="Nenhuma mídia\navaliada ainda.", text_color="gray", justify="center").pack(pady=20)
             return
 
-        for tmdb_id, dados in list(historico.items())[:self._n]:
+        for tmdb_id, dados in list(historico.items()):
             card = CardHistorico(self._frame_cards, midia=dados["midia"], avaliacao=dados["avaliacao"], comando=self._ao_clicar)
             card.grid(sticky="ew", pady=4, padx=4)
 
@@ -656,7 +655,7 @@ class SecaoMidias(ctk.CTkFrame):
         self._construir()
 
     def _construir(self):
-        ctk.CTkLabel(self, text=self._titulo_secao, font=("Arial", 15, "bold"), anchor="w").pack(fill="x", padx=10, pady=(10, 4))
+        ctk.CTkLabel(self, text=self._titulo_secao, font=("Arial", 15, "bold"), anchor="w").pack(fill="x", padx=30, pady=(10, 4))
 
         self._frame_cards = ctk.CTkFrame(self, fg_color="transparent")
         self._frame_cards.pack(fill="x", padx=10)
@@ -694,8 +693,8 @@ class PaginaMidia(ctk.CTkToplevel):
         self._fila_poster = Queue()
 
         self.title(midia.get_titulo())
-        self.geometry("600x600")
-        self.resizable(False, False)
+        self.geometry("600x700+150+0")
+        self.resizable(False, True)
         self.grab_set()
 
         self._avaliacao = self._sistema.get_avaliacao_usuario(midia.get_id())
@@ -928,36 +927,40 @@ class PaginaMidia(ctk.CTkToplevel):
             pass    
 
 class PainelRecomendacoes(ctk.CTkFrame):
-    def __init__(self, pai, sistema):
+    def __init__(self, pai, sistema : Sistema):
         super().__init__(pai)
         self._pai = pai
         self._sistema = sistema
         self._fila_recomendacoes = Queue()
+        self._mensagem = None
+        self._prompt = None
         self._construir()
 
     def _construir(self):
         self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         cabecalho = ctk.CTkFrame(self, fg_color="transparent")
         cabecalho.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 4))
         cabecalho.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(cabecalho, text="Recomendações", font=("Arial", 15, "bold"), anchor="w").grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(cabecalho, text="Recomendações", font=("Arial", 15, "bold"), anchor="center").grid(row=0, column=0, sticky="w", padx=(30, 0))
 
-        ctk.CTkButton(
-            cabecalho,
-            text="Atualizar",
-            width=100,
-            height=36,
-            command=self._carregar_recomendacoes,
-        ).grid(row=0, column=1, sticky="e")
-
-        self._frame_resultados = ctk.CTkScrollableFrame(self, fg_color="transparent", height=640)
+        self._frame_resultados = ctk.CTkFrame(self, fg_color="transparent")
         self._frame_resultados.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
-        for i in range(0, 7):
-            self._frame_resultados.grid_columnconfigure(i, weight=1, uniform="recomendacao", minsize=130)
+        self._frame_mensagem = ctk.CTkFrame(self, fg_color="transparent")
+        self._frame_mensagem.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 10))
+
+        self._frame_chat = ctk.CTkFrame(self, fg_color="transparent")
+        self._frame_chat.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 10))
+
+        self._entry_prompt = ctk.CTkEntry(self._frame_chat, placeholder_text="Que tipo de recomendação você quer hoje?", height=40, width=600)
+        self._entry_prompt.pack(side="left", expand=True, fill="x", padx=(0, 8))
+
+        self._btn_prompt = ctk.CTkButton(self._frame_chat, text="↑", height=40, command=self._verifica_prompt)
+        self._btn_prompt.pack(side="right")
 
         self._label_status = ctk.CTkLabel(self._frame_resultados, text="Carregando...", text_color="gray")
         self._label_status.grid(row=0, column=0, columnspan=7, pady=20)
@@ -969,7 +972,7 @@ class PainelRecomendacoes(ctk.CTkFrame):
             widget.destroy()
 
         self._label_status = ctk.CTkLabel(self._frame_resultados, text="Carregando...", text_color="gray")
-        self._label_status.grid(row=0, column=0, columnspan=7, pady=20)
+        self._label_status.pack(expand=True, anchor="center")
 
         thread = threading.Thread(target=self._worker_recomendacoes, daemon=True)
         thread.start()
@@ -977,7 +980,7 @@ class PainelRecomendacoes(ctk.CTkFrame):
 
     def _worker_recomendacoes(self):
         try:
-            recomendacoes = self._sistema.descobrir()
+            recomendacoes = self._sistema.descobrir(self._prompt)
             self._fila_recomendacoes.put(("ok", recomendacoes))
         except Exception as e:
             self._fila_recomendacoes.put(("erro", e))
@@ -990,16 +993,19 @@ class PainelRecomendacoes(ctk.CTkFrame):
             return
 
         if resultado[0] == "ok":
-            _, recomendacoes = resultado
-            self._exibir_recomendacoes(recomendacoes or [])
+            _, sugestoes = resultado
+            self._exibir_recomendacoes(sugestoes or [])
         else:
             _, erro = resultado
             print(f"Erro ao gerar recomendações: {erro}")
             self._exibir_erro()
 
-    def _exibir_recomendacoes(self, recomendacoes):
+    def _exibir_recomendacoes(self, sugestoes):
         for widget in self._frame_resultados.winfo_children():
             widget.destroy()
+
+        self._mensagem = sugestoes["mensagem"]
+        recomendacoes = self._sistema.gerar_recomendacoes(sugestoes)
 
         if not recomendacoes:
             ctk.CTkLabel(
@@ -1009,11 +1015,17 @@ class PainelRecomendacoes(ctk.CTkFrame):
             ).grid(row=0, column=0, columnspan=7, pady=20)
             return
 
+        frame_cards = ctk.CTkFrame(self._frame_resultados, fg_color="transparent")
+        frame_cards.pack(anchor="center")
+
         for index, midia in enumerate(recomendacoes):
             row = index // 7
             column = index % 7
-            card = CardMidia(self._frame_resultados, midia, comando=self._ao_clicar)
+            card = CardMidia(frame_cards, midia, comando=self._ao_clicar)
             card.grid(row=row, column=column, padx=5, pady=5, sticky="n")
+
+        mensagem_llm = ctk.CTkLabel(self._frame_mensagem, text=self._mensagem, wraplength=800, font=("Georgia", 20), justify="center", text_color="#AAAAAA")
+        mensagem_llm.pack(expand=True, anchor="center")
 
     def _exibir_erro(self):
         for widget in self._frame_resultados.winfo_children():
@@ -1027,3 +1039,17 @@ class PainelRecomendacoes(ctk.CTkFrame):
 
     def _ao_clicar(self, midia):
         PaginaMidia(self._pai, sistema=self._sistema, midia=midia)
+
+    def _verifica_prompt(self):
+        if not self._entry_prompt.get():
+            return
+        
+        for widget in self._frame_mensagem.winfo_children():
+            widget.destroy()
+
+        self._prompt = self._entry_prompt.get()
+        self._entry_prompt.delete(0, "end")
+        self._btn_prompt.focus()
+        self.after(10, lambda: self._entry_prompt._activate_placeholder())
+
+        self._carregar_recomendacoes()
