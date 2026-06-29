@@ -1,9 +1,3 @@
-'''
-from tkinter import *
-from tkinter.ttk import *
-'''
-import traceback
-
 import customtkinter as ctk
 import re
 import threading
@@ -15,33 +9,11 @@ from time import sleep
 
 from models.midia import *
 from controllers.sistema import Sistema
-from views.inicio import PainelInicio
 
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w200"
 
 ctk.set_appearance_mode("dark")
 
-'''
-class App(Tk):
-    def __init__(self, sistema: Sistema):
-        super().__init__()
-        self.title("Nome do App sei lá lol")
-
-        self.sistema = sistema
-
-        style = Style()
-        style.configure("Custom.TFrame", font=("Arial", 12), background="blue")
-
-        notebook = Notebook(self)
-        notebook.add(PainelInicio(self, self.sistema), text="Início")
-        # a decidir:
-        # notebook.add(PainelInicio(), text="Avaliações")
-        # notebook.add(PainelInicio(), text="Histórico")
-        # notebook.add(PainelInicio(), text="Conta")
-        notebook.pack(fill=BOTH, expand=True)
-
-        self.mainloop()
-'''
 
 class App(ctk.CTk):
     def __init__ (self):
@@ -958,100 +930,5 @@ class PaginaMidia(ctk.CTkToplevel):
 class PainelRecomendacoes(ctk.CTkFrame):
     def __init__(self, pai, sistema):
         super().__init__(pai)
-        self._pai = pai
         self._sistema = sistema
-        self._fila_recomendacoes = Queue()
-        self._construir()
-
-    def _construir(self):
-        self.grid_rowconfigure(1, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-
-        cabecalho = ctk.CTkFrame(self, fg_color="transparent")
-        cabecalho.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 4))
-        cabecalho.grid_columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(cabecalho, text="Recomendações", font=("Arial", 15, "bold"), anchor="w").grid(row=0, column=0, sticky="w")
-
-        ctk.CTkButton(
-            cabecalho,
-            text="Atualizar",
-            width=100,
-            height=36,
-            command=self._carregar_recomendacoes,
-        ).grid(row=0, column=1, sticky="e")
-
-        self._frame_resultados = ctk.CTkScrollableFrame(self, fg_color="transparent", height=640)
-        self._frame_resultados.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-
-        for i in range(0, 7):
-            self._frame_resultados.grid_columnconfigure(i, weight=1, uniform="recomendacao", minsize=130)
-
-        self._label_status = ctk.CTkLabel(self._frame_resultados, text="Carregando...", text_color="gray")
-        self._label_status.grid(row=0, column=0, columnspan=7, pady=20)
-
-        self.after(100, self._carregar_recomendacoes)
-
-    def _carregar_recomendacoes(self):
-        for widget in self._frame_resultados.winfo_children():
-            widget.destroy()
-
-        self._label_status = ctk.CTkLabel(self._frame_resultados, text="Carregando...", text_color="gray")
-        self._label_status.grid(row=0, column=0, columnspan=7, pady=20)
-
-        thread = threading.Thread(target=self._worker_recomendacoes, daemon=True)
-        thread.start()
-        self.after(100, self._verificar_recomendacoes)
-
-    def _worker_recomendacoes(self):
-        try:
-            recomendacoes = self._sistema.descobrir()
-            self._fila_recomendacoes.put(("ok", recomendacoes))
-        except Exception as e:
-            self._fila_recomendacoes.put(("erro", e))
-
-    def _verificar_recomendacoes(self):
-        try:
-            resultado = self._fila_recomendacoes.get_nowait()
-        except Empty:
-            self.after(100, self._verificar_recomendacoes)
-            return
-
-        if resultado[0] == "ok":
-            _, recomendacoes = resultado
-            self._exibir_recomendacoes(recomendacoes or [])
-        else:
-            _, erro = resultado
-            print(f"Erro ao gerar recomendações: {erro}")
-            self._exibir_erro()
-
-    def _exibir_recomendacoes(self, recomendacoes):
-        for widget in self._frame_resultados.winfo_children():
-            widget.destroy()
-
-        if not recomendacoes:
-            ctk.CTkLabel(
-                self._frame_resultados,
-                text="Nenhuma recomendação encontrada.",
-                text_color="gray",
-            ).grid(row=0, column=0, columnspan=7, pady=20)
-            return
-
-        for index, midia in enumerate(recomendacoes):
-            row = index // 7
-            column = index % 7
-            card = CardMidia(self._frame_resultados, midia, comando=self._ao_clicar)
-            card.grid(row=row, column=column, padx=5, pady=5, sticky="n")
-
-    def _exibir_erro(self):
-        for widget in self._frame_resultados.winfo_children():
-            widget.destroy()
-
-        ctk.CTkLabel(
-            self._frame_resultados,
-            text="Serviço temporariamente indisponível. Tente novamente.",
-            text_color="gray",
-        ).grid(row=0, column=0, columnspan=7, pady=20)
-
-    def _ao_clicar(self, midia):
-        PaginaMidia(self._pai, sistema=self._sistema, midia=midia)
+        ctk.CTkLabel(self, text="A fazer", text_color="gray").pack(expand=True)
