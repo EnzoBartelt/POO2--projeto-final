@@ -203,13 +203,64 @@ class Sistema:
         return dict(sorted(resultados.items(), key=lambda e: similaridade(keyword, e[1]["midia"].get_titulo()), reverse=True))
 
     def descobrir(self):
-        try:
-            response = self._cliente_tmdb.descobrir()
-        except Exception as e:
-            print(e)
-            return
+        historico = getattr(self, "_historico", None) or self.carregar_midias()
+        if not historico:
+            return []
 
-        pass
+        melhores = sorted(
+            self._historico.values(),
+            key=lambda dados: dados["avaliacao"].get_nota(),
+            reverse=True,
+        )[:5]
+
+        contexto = []
+        for dados in melhores:
+            midia = dados["midia"]
+            avaliacao = dados["avaliacao"]
+            tipo = "filme" if isinstance(midia, Filme) else "série"
+            comentario = avaliacao.get_comentario()
+            contexto.append(
+                f"- {midia.get_titulo()} ({tipo}); nota do usuário: {avaliacao.get_nota():.1f}; comentário: {comentario}"
+            )
+
+        prompt = f"""
+        Com base nas mídias que este usuário avaliou melhor, recomende até 5 filmes ou séries.
+        Evite recomendar os mesmos títulos já listados.
+
+        Histórico:
+        {"\n".join(contexto)}
+
+        Responda somente com JSON válido, sem texto extra, no formato:
+        [
+          {{"titulo": "Arrival", "tipo": "movie"}},
+          {{"titulo": "Dark", "tipo": "tv"}},
+          ...
+        ]
+
+        Use "movie" para filmes e "tv" para séries.
+        """
+
+        try:
+            response = self._cliente_groq.prompt(prompt)
+            sugestoes = json.loads(response)
+        except Exception as e:
+            print(f"[GROQ] Erro ao gerar recomendações: {e}")
+            return []
+
+        recomendacoes = []
+        for sugestao in sugestoes:
+            try:
+                for midia in self.buscar(sugestao["titulo"]):
+                    if sugestao["tipo"] == "movie" and isinstance(midia, Filme):
+                        recomendacoes.append(midia)
+                        break
+                    if sugestao["tipo"] == "tv" and isinstance(midia, Serie):
+                        recomendacoes.append(midia)
+                        break
+            except Exception:
+                pass
+
+        return recomendacoes
 
     def detalhes_midia(self, midia : Midia) -> Midia:
         if isinstance(midia, Filme):
@@ -226,25 +277,6 @@ class Sistema:
             return midia
         else:
             return midia
-
-    def gerar_recomendacoes(self) -> list[Midia]:
-        titles = [
-            "Pluribus",
-            "Arrival",
-            "Star Wars",
-        ]  # rascunho; acho q deveria receber outros dados, como parâmetros
-        raw = self._cliente_groq.prompt(f"""
-        Forneça até cinco recomendações de filmes ou séries de TV com base nas seguintes mídias: {", ".join(titles)}. \
-        Responda com uma lista JSON serializada e minificada, contendo os IDs dos filmes ou séries na IMDB.
-        """)
-        response = json.loads(raw)
-        recomendacoes: list[Midia] = []
-
-        for id in response:
-            midia = self.encontrar(id)
-            recomendacoes.append(midia)
-
-        return recomendacoes
 
 # --------------------------------------------------------------------------------------------------------------------------------------------
 #   FUNÇÕES AUXILIARES
