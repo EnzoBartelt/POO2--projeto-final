@@ -1,4 +1,4 @@
-COMANDOS DDL UTILIZADOS PARA CRIAÇÃO DO BANCO DE DADOS:
+Comandos DDL utilizados para criação do banco de dados. Para esse projeto, foi utilizado MySQL8, outros SGDBs podem ter alterções.
 
 CREATE SCHEMA projeto_poo2;
 
