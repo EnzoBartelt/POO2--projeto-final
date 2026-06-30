@@ -254,6 +254,7 @@ class Sistema:
 
         try:
             response = self._cliente_groq.prompt(prompt)
+            response = response.replace("```", "").replace("json", "")
             sugestoes = json.loads(response)
         except Exception as e:
             print(f"[GROQ] Erro ao gerar recomendações: {e}")
