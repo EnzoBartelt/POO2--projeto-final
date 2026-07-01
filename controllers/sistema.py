@@ -1,6 +1,5 @@
 import json
 import re
-from itertools import chain
 from difflib import SequenceMatcher
 
 from models.midia import Midia, Filme, Serie
@@ -11,16 +10,18 @@ from services.groq import ClienteGroq
 from services.tmdb import ClienteTMBD
 from data.repositorio import Repositorio
 
-
+# Classe Sistema faz todo o controle e conexão da interface do usuário com os serviços, repositório e classes
 class Sistema:
     def __init__(self):
+        # Instanciação do repositório (conexão com banco de dados) e dos clientes (conexão com APIs)
         self._cliente_tmdb = ClienteTMBD()
         self._cliente_groq = ClienteGroq()
         self._repositorio = Repositorio()
         self._usuario = None
         self._id_usuario = None
 
-    def cadastrar(self, nome : str, email : str, senha : str):
+    # Verifica as entradas e salva o novo usuário no banco de dados
+    def cadastrar(self, nome : str, email : str, senha : str) -> bool:
         if not nome or not email or not senha:
             raise Exception("Todos os campos são obrigatórios.")
         if not validar_nome(nome):
@@ -34,6 +35,7 @@ class Sistema:
         self._repositorio.salvar_usuario(usuario)
         return True
     
+    # Verifica as entradas e valida o login
     def logar(self, input : str, senha : str) -> bool:
         if not input or not senha:
             raise Exception("Preencha todos os campos para continuar")
@@ -41,6 +43,7 @@ class Sistema:
         usuario = None
         id_usuario = None
 
+        # Verifica se o usuário tentou entrar usando email ou nome de usuário e valida de acordo
         match classificar_entrada(input):
             case "email":
                 usuario, id_usuario = self._repositorio.buscar_usuario_email(input)
@@ -51,8 +54,10 @@ class Sistema:
             case _:
                 raise Exception("Erro desconhecido")
 
+        # Se encontrar o usuário valida a senha digitada
         if usuario and id_usuario:
             if self._repositorio.validar_senha(senha, usuario.get_senha()):
+                # Define o usuário do sistema
                 self._usuario = usuario
                 self._id_usuario = id_usuario
                 self.carregar_midias()
@@ -61,12 +66,13 @@ class Sistema:
         else:
             return False
         
-    def deslogar(self):
+    # Desloga o usuário, definindo o usuário ativo como None
+    def deslogar(self) -> None:
         self._usuario = None
         self._id_usuario = None
 
     # Popula filmes_vistos do usuário e carrega o histórico para a interface
-    def carregar_midias(self):
+    def carregar_midias(self) -> dict | None:
         filmes_vistos = self._repositorio.buscar_avaliacoes(self._id_usuario)
         self._usuario.set_filmes_vistos(filmes_vistos)
         self._historico = self._repositorio.buscar_historico(self._id_usuario)
@@ -94,7 +100,8 @@ class Sistema:
             self._historico[midia.get_id()] = {"midia": midia, "avaliacao": avaliacao}
         return sucesso
 
-    def trending(self):
+    # Chama endpoint /trending da API do TMDB, retornando uma lista de objetos do tipo Filme ou Serie
+    def trending(self) -> list[Midia]:
         mapa_generos = self._cliente_tmdb.generos() 
         trending = self._cliente_tmdb.trending()
         midias = []
@@ -124,7 +131,8 @@ class Sistema:
             print(e)
             return None
 
-    def upcoming(self):
+    # Chama endpoint /upcoming da API do TMDB, retornando uma lista de objetos do tipo Filme (esse endpoint acessa apenas filmes)
+    def upcoming(self) -> list[Midia]:
         mapa_generos = self._cliente_tmdb.generos()
         dados = self._cliente_tmdb.upcoming()
         midias = []
@@ -144,7 +152,8 @@ class Sistema:
             print(e)
             return []
 
-    def buscar(self, keyword: str, page : int = 1):
+    # Chama endpoint /search/multi da API do TMDB, retornando uma lista de objetos do tipo Filme ou Serie, com base na palavra chave utilizad
+    def buscar(self, keyword: str, page : int = 1) -> list[Midia]:
         try:
             response = self._cliente_tmdb.buscar(keyword, page)
         except Exception as e:
@@ -189,6 +198,7 @@ class Sistema:
                 
         return midias
 
+    # Realiza uma busca no histórico do usuário com base na similaridade de palavras 
     def buscar_historico(self, keyword: str) -> dict:
         if not self._historico or not keyword:
             return self._historico or {}
@@ -202,7 +212,8 @@ class Sistema:
         # Ordena do mais similar para o menos
         return dict(sorted(resultados.items(), key=lambda e: similaridade(keyword, e[1]["midia"].get_titulo()), reverse=True))
 
-    def descobrir(self, prompt_usuario : str = None):
+    # Gera sugestões utilizando a API do Groq
+    def descobrir(self, prompt_usuario : str = None) -> dict:
         historico = getattr(self, "_historico", None) or self.carregar_midias()
         if not historico:
             return []
@@ -262,7 +273,8 @@ class Sistema:
 
         return sugestoes
     
-    def gerar_recomendacoes(self, sugestoes):
+    # Gera lista de objetos do tipo Midia a partir do dicionário retornado pelo Groq
+    def gerar_recomendacoes(self, sugestoes) -> list[Midia]:
         recomendacoes = []
         for sugestao in sugestoes["recomendacoes"]:
             try:
@@ -278,6 +290,7 @@ class Sistema:
 
         return recomendacoes
 
+    # Busca detalhes adicionais de determinada mídia, e complementa seus dados (são puxados da API incompletos para criação dos cards)
     def detalhes_midia(self, midia : Midia) -> Midia:
         if isinstance(midia, Filme):
             response = self._cliente_tmdb.detalhes_filme(midia.get_id())
@@ -298,12 +311,15 @@ class Sistema:
 #   FUNÇÕES AUXILIARES
 # --------------------------------------------------------------------------------------------------------------------------------------------
 
+# Evita carcteres especiais no nome
 def validar_nome(nome: str) -> bool:
     return bool(re.match(r'^[A-Za-zÀ-ÿ\s]+$', nome))
 
+# Confere um formato de email básico
 def validar_email(email: str) -> bool:
     return bool(re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email))
 
+# Verifica os critérios de senha
 def validar_senha(senha: str) -> bool:
     if len(senha) < 8:
         return False
@@ -317,6 +333,7 @@ def validar_senha(senha: str) -> bool:
         return False
     return True
 
+# Verifica se uma entrada é email ou nome de usuário (com base nos critérios de validação)
 def classificar_entrada(texto: str) -> str:
     if re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', texto):
         return "email"
@@ -326,6 +343,7 @@ def classificar_entrada(texto: str) -> str:
 
     return "invalido"
 
+# Verifica a semelhança entre duas strings (usado para busca no histórico)
 def similaridade(keyword : str, titulo: str) -> float:
             titulo = titulo.lower()
 
